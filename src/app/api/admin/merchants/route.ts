@@ -1,4 +1,3 @@
-import { createHash, randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth/server';
@@ -91,8 +90,6 @@ export async function POST(request: Request) {
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Revisá los datos del comercio y el plan.' }, { status: 400 });
   const input = parsed.data;
-  const token = randomBytes(32).toString('base64url');
-  const tokenHash = createHash('sha256').update(token).digest('hex');
   const email = input.email.toLowerCase();
 
   try {
@@ -121,28 +118,22 @@ export async function POST(request: Request) {
       ), membership AS (
         INSERT INTO public.merchant_users (merchant_id,email,full_name,role,status)
         SELECT id,${email},${input.ownerName},'owner','invited' FROM merchant RETURNING merchant_id
-      ), invite AS (
-        INSERT INTO public.merchant_invitations (merchant_id,email,full_name,role,token_hash,invited_by,expires_at)
-        SELECT id,${email},${input.ownerName},'owner',${tokenHash},${user.email},now()+interval '7 days'
-        FROM merchant RETURNING merchant_id,id,expires_at
       ), audit AS (
         INSERT INTO public.audit_logs (merchant_id,actor_type,action,entity_type,entity_id,reason,after_data)
         SELECT id,'superadmin','merchant.created','merchant',id,'Alta desde superadmin',
           jsonb_build_object('email',${email},'plan',${input.planCode},'billing_interval',${input.billingInterval})
         FROM merchant RETURNING id
       )
-      SELECT m.id,m.created_at,s.id AS subscription_id,i.id AS invitation_id,i.expires_at
+      SELECT m.id,m.created_at,s.id AS subscription_id,mm.merchant_id
       FROM merchant m JOIN subscription s ON s.merchant_id=m.id
-      JOIN invite i ON i.merchant_id=m.id JOIN membership mm ON mm.merchant_id=m.id CROSS JOIN audit
+      JOIN membership mm ON mm.merchant_id=m.id CROSS JOIN audit
     `;
     const rows = Array.isArray(result) ? result : result.rows;
     if (!rows.length) return NextResponse.json({ error: 'El plan no existe o está inactivo.' }, { status: 400 });
     const created = rows[0] as Record<string, unknown>;
     return NextResponse.json({
       data: created,
-      invitation: { url: `${new URL(request.url).origin}/aceptar-invitacion?token=${token}`,
-        expiresAt: created.expires_at,
-        message: 'Comercio creado. El titular debe aceptar la invitación para vincular su cuenta y definir la contraseña.' },
+      access: { status: 'pending', message: 'La cuenta de acceso Neon Auth del titular aún requiere provisionamiento.' },
     }, { status: 201 });
   } catch (error) {
     console.error('ARCREDIX admin merchants POST failed:', error);
