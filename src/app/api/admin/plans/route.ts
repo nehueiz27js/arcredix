@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireSuperAdmin } from '@/lib/auth/authorization';
-import { getDatabase } from '@/lib/db/client';
+import { getAuthenticatedDatabase } from '@/lib/db/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +38,7 @@ export async function GET() {
   }
 
   try {
-    const sql = getDatabase();
+    const sql = await getAuthenticatedDatabase();
     const result = await sql`
       SELECT
         p.id,
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const sql = getDatabase();
+    const sql = await getAuthenticatedDatabase();
     const result = await sql`
       WITH created AS (
         INSERT INTO public.plans (
@@ -150,7 +150,7 @@ export async function PATCH(request: Request) {
   const data = parsed.data;
 
   try {
-    const sql = getDatabase();
+    const sql = await getAuthenticatedDatabase();
     const result = await sql`
       WITH target AS (
         SELECT id, name, monthly_price_usd, connection_limit, features, is_active

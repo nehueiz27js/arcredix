@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireSuperAdmin } from '@/lib/auth/authorization';
-import { getDatabase } from '@/lib/db/client';
+import { getAuthenticatedDatabase } from '@/lib/db/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const sql = getDatabase();
+    const sql = await getAuthenticatedDatabase();
     const result = await sql`
       SELECT
         s.id,
@@ -93,7 +93,7 @@ export async function PATCH(request: Request) {
   const eventType = data.action === 'extend' ? 'subscription.extended' : 'subscription.status_changed';
 
   try {
-    const sql = getDatabase();
+    const sql = await getAuthenticatedDatabase();
     const result = await sql`
       WITH target AS (
         SELECT

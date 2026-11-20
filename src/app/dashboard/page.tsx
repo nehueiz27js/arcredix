@@ -4,7 +4,7 @@ import { Building2, Clock3, ShieldCheck } from 'lucide-react';
 
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { auth } from '@/lib/auth/server';
-import { getDatabase } from '@/lib/db/client';
+import { getAuthenticatedDatabase } from '@/lib/db/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +53,7 @@ export default async function DashboardPage() {
 
   if (!user?.id) redirect('/login');
 
-  const sql = getDatabase();
+  const sql = await getAuthenticatedDatabase();
   const result = await sql`
     SELECT
       m.id,

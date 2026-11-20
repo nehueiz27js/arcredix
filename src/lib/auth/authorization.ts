@@ -2,7 +2,7 @@ import 'server-only';
 
 import { auth } from '@/lib/auth/server';
 import { isSuperAdminEmail } from '@/lib/auth/superadmin';
-import { getDatabase } from '@/lib/db/client';
+import { getAuthenticatedDatabase } from '@/lib/db/client';
 
 export type MerchantRole = 'owner' | 'admin' | 'manager' | 'operator' | 'viewer';
 
@@ -81,7 +81,7 @@ export async function getCurrentMerchantMembership(): Promise<MerchantMembership
   const user = await getAuthenticatedUser();
   if (!user?.id) return null;
 
-  const sql = getDatabase();
+  const sql = await getAuthenticatedDatabase();
   const result = await sql`
     SELECT
       mu.id AS membership_id,

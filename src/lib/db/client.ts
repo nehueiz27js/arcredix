@@ -1,6 +1,7 @@
-import "server-only";
+import 'server-only';
 
-import { neon } from "@neondatabase/serverless";
+import { neon } from '@neondatabase/serverless';
+import { auth } from '@/lib/auth/server';
 
 type NeonClient = ReturnType<typeof neon>;
 
@@ -10,31 +11,55 @@ function getDatabaseUrl(): string {
   const connectionString = process.env.DATABASE_URL?.trim();
 
   if (!connectionString) {
-    throw new Error("DATABASE_URL no está configurada.");
+    throw new Error('DATABASE_URL no está configurada.');
   }
 
   let parsed: URL;
   try {
     parsed = new URL(connectionString);
   } catch {
-    throw new Error("DATABASE_URL no tiene un formato válido.");
+    throw new Error('DATABASE_URL no tiene un formato válido.');
   }
 
-  if (!["postgres:", "postgresql:"].includes(parsed.protocol)) {
-    throw new Error("DATABASE_URL debe ser una conexión PostgreSQL.");
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    throw new Error('DATABASE_URL debe ser una conexión PostgreSQL.');
   }
 
-  return connectionString;
+  const existingOptions = parsed.searchParams.get('options')?.trim() ?? '';
+  if (!existingOptions.includes('role=arcredix_app')) {
+    parsed.searchParams.set(
+      'options',
+      [existingOptions, '-c role=arcredix_app'].filter(Boolean).join(' '),
+    );
+  }
+
+  return parsed.toString();
 }
 
 /**
- * Server-only Neon HTTP client. Use the pooled DATABASE_URL for app traffic.
- * Keep DATABASE_URL_UNPOOLED reserved for future migration tooling.
+ * Application client. It switches the owner login to the restricted
+ * arcredix_app role and optionally forwards the verified Neon Auth JWT.
  */
-export function getDatabase(): NeonClient {
+export function getDatabase(authToken?: string): NeonClient {
+  const connectionString = getDatabaseUrl();
+
+  if (authToken) {
+    return neon(connectionString, { authToken });
+  }
+
   if (!databaseClient) {
-    databaseClient = neon(getDatabaseUrl());
+    databaseClient = neon(connectionString);
   }
 
   return databaseClient;
+}
+
+export async function getAuthenticatedDatabase(): Promise<NeonClient> {
+  const { data, error } = await auth.token();
+
+  if (error || !data?.token) {
+    throw new Error('No se pudo obtener el token autenticado para consultar la base de datos.');
+  }
+
+  return getDatabase(data.token);
 }

@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { auth } from '@/lib/auth/server';
 import { isSuperAdminEmail } from '@/lib/auth/superadmin';
-import { getDatabase } from '@/lib/db/client';
+import { getAuthenticatedDatabase } from '@/lib/db/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const sql = getDatabase();
+    const sql = await getAuthenticatedDatabase();
     const [merchantResult, statsResult] = await Promise.all([
       sql`
         SELECT
@@ -139,7 +139,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const sql = getDatabase();
+    const sql = await getAuthenticatedDatabase();
     const result = await sql`
       WITH target AS (
         SELECT id, status
