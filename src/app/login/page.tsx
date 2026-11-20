@@ -12,6 +12,9 @@ export default function LoginPage() {
         <h1>Ingresá a tu comercio.</h1>
         <p>Accedé al panel de control de cobros, cajas y movimientos de tu comercio.</p>
         <AuthForm mode='login' />
+        <div className='mt-5 text-center'>
+          <Link className='text-sm text-emerald-300 hover:text-emerald-200' href='/recuperar-acceso'>¿Olvidaste o necesitás configurar tu contraseña?</Link>
+        </div>
         <Link className='auth-back-link' href='/'>Volver al sitio</Link>
       </section>
     </main>
