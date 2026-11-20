@@ -1,14 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
-import { getDatabase } from "@/lib/db/client";
+import { getDatabase } from '@/lib/db/client';
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     const sql = getDatabase();
-    const [result] = await sql`
+    const result = await sql`
       SELECT
         current_database() AS database_name,
         EXISTS (
@@ -18,20 +18,18 @@ export async function GET() {
             AND table_name = 'plans'
         ) AS catalog_ready
     `;
+    const rows = Array.isArray(result) ? result : result.rows;
+    const row = rows[0] as { database_name: string; catalog_ready: boolean } | undefined;
 
     return NextResponse.json({
-      status: "ok",
-      database: "connected",
-      catalog: result?.catalog_ready ? "ready" : "missing",
+      status: 'ok',
+      database: 'connected',
+      catalog: row?.catalog_ready ? 'ready' : 'missing',
       timestamp: new Date().toISOString(),
     });
   } catch {
     return NextResponse.json(
-      {
-        status: "error",
-        database: "unavailable",
-        timestamp: new Date().toISOString(),
-      },
+      { status: 'error', database: 'unavailable', timestamp: new Date().toISOString() },
       { status: 503 },
     );
   }

@@ -1,5 +1,19 @@
-import Link from "next/link";
-import { Brand } from "@/components/landing/brand";
+import Link from 'next/link';
+
+import { AuthForm } from '@/components/auth/auth-form';
+import { Brand } from '@/components/landing/brand';
+
 export default function LoginPage() {
-  return <main className="auth-shell"><div className="auth-card"><Brand/><span className="section-kicker">ACCESO A LA PLATAFORMA</span><h1>Ingresá a tu comercio.</h1><p>El acceso al portal estará disponible cuando terminemos de integrar autenticación y gestión de cuentas.</p><Link className="button" href="/">Volver al sitio</Link></div></main>;
+  return (
+    <main className='auth-shell'>
+      <section className='auth-card auth-card-functional'>
+        <Brand />
+        <span className='section-kicker'>ACCESO A LA PLATAFORMA</span>
+        <h1>Ingresá a tu comercio.</h1>
+        <p>Accedé al panel de control de cobros, cajas y movimientos de tu comercio.</p>
+        <AuthForm mode='login' />
+        <Link className='auth-back-link' href='/'>Volver al sitio</Link>
+      </section>
+    </main>
+  );
 }
