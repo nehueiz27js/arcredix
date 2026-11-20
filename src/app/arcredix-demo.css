@@ -1,0 +1,46 @@
+
+/* ARCREDIX - actualización de demo y separación de comprobantes/ingresos */
+.payment-demo-v2 { max-width: 560px; }
+.demo-summary-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:18px 0 12px; }
+.demo-summary-grid > div { display:grid; gap:5px; padding:13px; border:1px solid var(--line); border-radius:9px; background:rgba(255,255,255,.025); }
+.demo-summary-grid span { color:#81949e; font-size:8px; letter-spacing:1px; }
+.demo-summary-grid strong { font-size:25px; line-height:1.1; }
+.demo-summary-grid small { color:#91a3ad; font-size:8px; }
+.demo-separation-note { display:flex; gap:9px; align-items:flex-start; padding:11px; border:1px solid rgba(255,190,90,.2); background:rgba(255,190,90,.045); color:#c8b99e; border-radius:8px; font-size:9px; line-height:1.6; }
+.demo-separation-note svg { flex:none; color:#e9bd70; }
+.demo-list-heading { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:19px 0 9px; }
+.demo-list-heading strong { font-size:11px; }
+.demo-list-heading span { color:#81949e; font-size:8px; }
+.demo-transfer-list { display:grid; gap:8px; max-height:365px; overflow:auto; }
+.demo-transfer { padding:11px; border:1px solid var(--line); border-radius:9px; background:rgba(255,255,255,.018); }
+.demo-transfer-authorized { border-color:rgba(0,214,160,.25); background:rgba(0,214,160,.035); }
+.demo-transfer-main { display:flex; align-items:center; gap:9px; }
+.demo-transfer-icon { width:29px; height:29px; display:grid; place-items:center; color:var(--mint); background:rgba(0,214,160,.09); border-radius:8px; flex:none; }
+.demo-transfer-person { min-width:0; flex:1; }
+.demo-transfer-person strong,.demo-transfer-person small { display:block; }
+.demo-transfer-person strong { font-size:10px; }
+.demo-transfer-person small { margin-top:4px; color:#81949e; font-size:8px; }
+.demo-transfer-amount { white-space:nowrap; font-size:11px; }
+.demo-transfer-action { width:100%; margin-top:10px; padding:9px 12px; font-size:9px; }
+.demo-authorized-state { display:flex; align-items:center; gap:8px; margin-top:10px; padding:9px; border-radius:7px; color:var(--mint); background:rgba(0,214,160,.07); }
+.demo-authorized-state span,.demo-authorized-state strong,.demo-authorized-state small { display:block; }
+.demo-authorized-state strong { font-size:9px; }
+.demo-authorized-state small { margin-top:3px; color:#91a9a9; font-size:8px; }
+.demo-receipts { display:flex; align-items:center; gap:10px; margin-top:12px; padding:12px; border:1px dashed rgba(173,190,199,.24); border-radius:8px; }
+.demo-receipts-icon { color:#aab8c0; }
+.demo-receipts > div:nth-child(2) { min-width:0; flex:1; }
+.demo-receipts strong,.demo-receipts small { display:block; }
+.demo-receipts strong { font-size:9px; }
+.demo-receipts small { color:#81949e; font-size:8px; margin-top:4px; }
+.demo-receipts-status { color:#e6bd77; font-size:8px; white-space:nowrap; }
+.demo-actions-footer { align-items:center; }
+.demo-voice-label { display:flex; align-items:center; gap:6px; margin-right:auto; color:#9cabb4; font-size:9px; }
+@media(max-width:680px) {
+  .payment-demo-v2 { padding:15px; }
+  .demo-summary-grid strong { font-size:22px; }
+  .demo-transfer-main { gap:7px; }
+  .demo-transfer-amount { font-size:10px; }
+  .demo-transfer-person strong { font-size:9px; }
+  .demo-transfer-person small { font-size:7px; }
+  .demo-receipts { gap:7px; }
+}
