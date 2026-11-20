@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 import { Building2, CreditCard, LayoutDashboard, Tags } from 'lucide-react';
 
@@ -14,7 +15,7 @@ const sections = [
   { href: '/admin/suscripciones', label: 'Suscripciones', icon: CreditCard },
 ];
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children }: { children: ReactNode }) {
   const { data: session } = await auth.getSession();
   const user = session?.user;
 
