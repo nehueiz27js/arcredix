@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Building2, Copy, Plus, RefreshCw, Search, ShieldCheck, Tag } from 'lucide-react';
 
 type MerchantStatus = 'pending' | 'active' | 'suspended' | 'cancelled';
@@ -81,7 +81,7 @@ export function MerchantManager() {
     }).catch(() => setPlans([]));
   }, []);
 
-  async function createMerchant(event: React.FormEvent<HTMLFormElement>) {
+  async function createMerchant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setCreating(true); setError(''); setNotice(''); setInviteUrl('');
     try {
       const response = await fetch('/api/admin/merchants', {
@@ -105,7 +105,7 @@ export function MerchantManager() {
     setPendingId(merchant.id); setError(''); setNotice('');
     try {
       const response = await fetch('/api/admin/merchants', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ merchantId: merchant.id, status, reason }),
       });
       const payload = await response.json();
