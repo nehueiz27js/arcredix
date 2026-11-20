@@ -55,11 +55,15 @@ export function getDatabase(authToken?: string): NeonClient {
 }
 
 export async function getAuthenticatedDatabase(): Promise<NeonClient> {
-  const { data, error } = await auth.token();
+  const tokenEndpoint = auth.token as unknown as () => Promise<{
+    data?: { token?: string } | null;
+    error?: unknown;
+  }>;
+  const tokenResult = await tokenEndpoint();
 
-  if (error || !data?.token) {
+  if (tokenResult.error || typeof tokenResult.data?.token !== 'string') {
     throw new Error('No se pudo obtener el token autenticado para consultar la base de datos.');
   }
 
-  return getDatabase(data.token);
+  return getDatabase(tokenResult.data.token);
 }
