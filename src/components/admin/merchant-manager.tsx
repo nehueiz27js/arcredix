@@ -76,6 +76,7 @@ export function MerchantManager() {
   const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
+    await Promise.resolve();
     setLoading(true);
     setError('');
     try {
