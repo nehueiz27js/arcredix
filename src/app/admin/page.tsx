@@ -58,6 +58,11 @@ export default async function AdminPage() {
             <SignOutButton />
           </div>
         </header>
+        <nav aria-label="Módulos de administración" className="mb-6 flex flex-wrap gap-2">
+          <Link href="/admin" className="rounded-lg border border-emerald-300/40 bg-emerald-300/10 px-3 py-2 text-sm text-emerald-200">Comercios</Link>
+          <Link href="/admin/planes" className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 hover:border-emerald-300/40">Planes</Link>
+          <Link href="/admin/suscripciones" className="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 hover:border-emerald-300/40">Suscripciones</Link>
+        </nav>
         <MerchantManager />
       </div>
     </main>
