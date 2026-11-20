@@ -14,7 +14,7 @@
 - Usar claves de idempotencia en operaciones externas y restricciones únicas en la base.
 - Las tareas programadas deben autenticar su invocación y ser idempotentes.
 
-## Mercado Pago
+## Row-Level Security (RLS)\n\nLa migración `0005_tenant_rls.sql` está aplicada en Neon main. RLS está habilitado y forzado en 18 tablas públicas; `schema_migrations` queda fuera de RLS y sin privilegios para `arcredix_app`.\n\n- `arcredix_app` es un rol `NOLOGIN` y `NOBYPASSRLS`; `arcredix_owner` es el rol de migración/administración y tiene `BYPASSRLS`.\n- El cliente de aplicación debe establecer `role=arcredix_app` en el inicio de conexión y enviar el JWT autenticado mediante `authToken`. No usar el cliente propietario para rutas de usuario.\n- `auth.user_id()` se encapsula en funciones `SECURITY DEFINER` con `search_path` fijo; las políticas comprueban membresía activa y superadmin.\n- La lectura pública se limita a planes/proveedores activos. Los datos de comercios, conexiones, cajas, QR, suscripciones, transacciones y auditoría tienen políticas de tenant.\n- Las pruebas de aislamiento se ejecutaron en una branch de Neon con sujetos de prueba. La autenticación RLS con sesión real en la aplicación local y la validación de conexión startup-role siguen pendientes; no desplegar hasta completar ese smoke test.\n\n## Mercado Pago
 
 La integración de Mercado Pago debe implementarse como adaptador de proveedor y no mezclarse con las reglas de dominio.
 
