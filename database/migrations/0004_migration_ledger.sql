@@ -64,7 +64,7 @@ INSERT INTO public.schema_migrations (version, migration_name, checksum)
 VALUES
   ('0001', 'initial_schema', '0dcfceb3fca902e627f4b71c2886391929236898'),
   ('0002', 'operational_core', '54496728ef7616cba4f0b1ac5e913081d8f08152'),
-  ('0003', 'tenant_integrity_and_billing', '9b34233a2d1c2e143d0e4974e1006281d76eb52')
+  ('0003', 'tenant_integrity_and_billing', '9b34233a2d1c2e143d0e4974e1006281d76eb52d')
 ON CONFLICT (version) DO NOTHING;
 ),
   applied_at timestamptz NOT NULL DEFAULT now(),
