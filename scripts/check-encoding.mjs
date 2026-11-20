@@ -54,7 +54,7 @@ async function walk(directory) {
       failures.push(`${relativePath}: contiene BOM UTF-8; guardar como UTF-8 sin BOM`);
     }
 
-    if (suspiciousText.some((pattern) => pattern.test(content))) {
+    if (relativePath !== 'scripts/check-encoding.mjs' && suspiciousText.some((pattern) => pattern.test(content))) {
       failures.push(`${relativePath}: posible mojibake o carácter de reemplazo`);
     }
   }
