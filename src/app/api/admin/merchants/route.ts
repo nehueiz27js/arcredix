@@ -112,7 +112,7 @@ export async function POST(request: Request) {
         INSERT INTO public.subscriptions (merchant_id,plan_id,status,billing_interval,price_usd,starts_at,current_period_start,current_period_end,metadata)
         SELECT m.id,p.id,${input.status === 'active' ? 'active' : 'pending'},${input.billingInterval},
           CASE WHEN ${input.billingInterval}='year' THEN p.monthly_price_usd*12
-               WHEN ${input.billingInterval}='one_time' THEN p.monthly_price_usd*26
+               WHEN ${input.billingInterval}='one_time' THEN 390
                ELSE p.monthly_price_usd END,
           now(),now(),CASE WHEN ${input.billingInterval}='month' THEN now()+interval '1 month'
                           WHEN ${input.billingInterval}='year' THEN now()+interval '1 year' ELSE NULL END,
