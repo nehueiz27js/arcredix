@@ -123,7 +123,7 @@ export function MerchantManager() {
     const oldLabel = labelOf(merchant);
     try {
       const response = await fetch('/api/admin/merchants', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ merchantId: merchant.id, labelName: labelNames[merchant.id] ?? oldLabel.name, labelColor: labelColors[merchant.id] ?? oldLabel.color }),
       });
       const payload = await response.json();
