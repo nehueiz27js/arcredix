@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Building2, Copy, Plus, RefreshCw, Search, ShieldCheck, Tag } from 'lucide-react';
+import { Building2, Plus, RefreshCw, Search, ShieldCheck, Tag } from 'lucide-react';
 
 type MerchantStatus = 'pending' | 'active' | 'suspended' | 'cancelled';
 type LabelColor = 'emerald' | 'blue' | 'violet' | 'amber' | 'rose' | 'cyan' | 'slate';
@@ -52,7 +52,6 @@ export function MerchantManager() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [inviteUrl, setInviteUrl] = useState('');
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
     legalName: '', tradeName: '', ownerName: '', email: '', phone: '', whatsappPhone: '', taxId: '',
@@ -85,15 +84,14 @@ export function MerchantManager() {
   }, []);
 
   async function createMerchant(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setCreating(true); setError(''); setNotice(''); setInviteUrl('');
+    event.preventDefault(); setCreating(true); setError(''); setNotice('');
     try {
       const response = await fetch('/api/admin/merchants', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? 'No se pudo dar de alta.');
-      setInviteUrl(payload.invitation?.url ?? '');
-      setNotice('Comercio creado. La vinculación de la cuenta del titular queda pendiente de invitación.');
+      setNotice('Alta comercial creada. La cuenta de acceso Neon Auth del titular queda pendiente de provisionamiento.');
       setShowCreate(false);
       setForm({ legalName: '', tradeName: '', ownerName: '', email: '', phone: '', whatsappPhone: '', taxId: '', planCode: 'starter', billingInterval: 'month', status: 'pending', labelName: '', labelColor: 'emerald' });
       await load();
@@ -183,7 +181,6 @@ export function MerchantManager() {
         </div>
         {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-sm text-red-200">{error}</p>}
         {notice && <p role="status" className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3 text-sm text-emerald-200">{notice}</p>}
-        {inviteUrl && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300/20 bg-amber-300/5 p-3 text-sm"><span className="text-amber-100">Invitación generada · vence en 7 días</span><button type="button" onClick={() => void navigator.clipboard.writeText(inviteUrl)} className="inline-flex items-center gap-2 text-amber-200 hover:text-white"><Copy size={15} /> Copiar enlace</button></div>}
 
         {loading ? <p className="py-12 text-center text-sm text-slate-400">Cargando clientes…</p> : merchants.length === 0 ? <div className="py-12 text-center"><Building2 className="mx-auto text-slate-600" size={30} /><p className="mt-3 text-sm text-slate-300">No hay clientes con estos filtros.</p></div> : <div className="mt-5 space-y-3">
           {merchants.map((merchant) => {
