@@ -13,7 +13,9 @@ Este documento distingue código existente, base de datos comprobada y trabajo p
 | Autorización de tenant | Parcial con RLS | `arcredix_app` NOLOGIN/NOBYPASSRLS, JWT Neon Auth y políticas RLS aplicadas; aislamiento SQL probado en branch; smoke test con sesión real pendiente |
 | Esquema inicial | Aplicado | Nueve tablas iniciales verificadas en Neon |
 | Esquema operativo 0002 | Aplicado | Seis tablas nuevas e índices verificados |
-| Integridad y billing 0003 | Aplicado | FKs compuestas, `subscription_payments` y `scheduled_jobs` verificados |\n| Ledger de migraciones 0004 | Aplicado | `schema_migrations` registra 0001–0004 con Git blob SHA-1; runner `npm run migrate` implementado |\n| RLS 0005 | Aplicado | 18 tablas con RLS ENABLE + FORCE; `schema_migrations` reservada al rol de migración; políticas de tenant y superadmin |
+| Integridad y billing 0003 | Aplicado | FKs compuestas, `subscription_payments` y `scheduled_jobs` verificados |
+| Ledger de migraciones 0004 | Aplicado | `schema_migrations` registra 0001–0004 con Git blob SHA-1; runner `npm run migrate` implementado |
+| RLS 0005 | Aplicado | 18 tablas con RLS ENABLE + FORCE; `schema_migrations` reservada al rol de migración; políticas de tenant y superadmin |
 | Panel superadmin | Parcial | Comercios, planes y suscripciones tienen vistas administrativas |
 | Comercios | Parcial | Listado, filtros y cambio de estado; alta integral y edición completa pendientes |
 | Planes | Parcial | GET/POST/PATCH, alta, edición de precio/límite y activación desde el panel; precios anuales y pago único pendientes |
@@ -43,15 +45,18 @@ Este documento distingue código existente, base de datos comprobada y trabajo p
 - [x] Versionar y aplicar las migraciones operativas 0002 y 0003.
 - [x] Probar migraciones en ramas temporales.
 - [x] Aplicar migraciones a Neon main.
-- [x] Ejecutar controles automáticos de UTF-8, pruebas, TypeScript, ESLint y build mediante GitHub Actions.\n- [x] Aplicar y verificar ledger 0004 y RLS 0005 en Neon main; sin datos comerciales modificados.
+- [x] Ejecutar controles automáticos de UTF-8, pruebas, TypeScript, ESLint y build mediante GitHub Actions.
+- [x] Aplicar y verificar ledger 0004 y RLS 0005 en Neon main; sin datos comerciales modificados.
 
 ### Hito B — Seguridad y acceso
 - [x] Crear autorización reutilizable para superadmin y miembros.
 - [x] Aplicar permisos por rol con overrides deny-only.
 - [x] Agregar restricciones compuestas para evitar referencias cruzadas entre tenants.
+- [x] Aplicar RLS ENABLE + FORCE en 18 tablas y rol de aplicación NOLOGIN/NOBYPASSRLS.
+- [x] Probar políticas RLS en branch: dos tenants aislados, usuario sin membresía y superadmin.
+- [ ] Smoke test de conexión de aplicación con sesión JWT real en copia local.
 - [ ] Cubrir todos los endpoints con permisos y aislamiento tenant.
 - [ ] Alta manual, invitaciones con token hash, expiración y revocación.
-- [ ] Pruebas de acceso cruzado entre comercios.
 
 ### Hito C — Administración y suscripciones
 - [x] Listado y actualización de planes desde el superadmin.
@@ -84,7 +89,8 @@ Este documento distingue código existente, base de datos comprobada y trabajo p
 - [x] UTF-8 y mojibake sin hallazgos en CI.
 - [x] Build limpio en CI.
 - [x] Pruebas unitarias iniciales.
-- [ ] Suite de pruebas de negocio y autorización de endpoints.\n- [x] Pruebas SQL de aislamiento RLS en branch de Neon.
+- [ ] Suite de pruebas de negocio y autorización de endpoints.
+- [x] Pruebas SQL de aislamiento RLS en branch de Neon.
 - [ ] Sandbox de pagos validado.
 - [ ] Revisión de seguridad y aislamiento.
 - [ ] Checklist de variables de entorno y operaciones.

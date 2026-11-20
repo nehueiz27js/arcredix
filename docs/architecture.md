@@ -107,9 +107,21 @@ Leer un QR, cargar un comprobante o recibir una captura nunca debe marcar una op
 
 Los vencimientos, recordatorios, reintentos de notificación y conciliaciones no pueden depender de que el usuario tenga el panel abierto. Se ejecutarán mediante tareas programadas seguras, con locks, idempotencia, límites de reintento y observabilidad.
 
-## Persistencia
+## Acceso a base de datos y RLS
 
-Las migraciones SQL versionadas son la fuente reproducible del esquema. Antes de una migración se debe probar en una rama temporal de Neon, revisar el resultado y luego aplicarla a la rama principal. No editar manualmente el esquema sin agregar su migración correspondiente.
+- El rol propietario `arcredix_owner` tiene `BYPASSRLS`; no debe usarse para consultas de usuario.
+- Las consultas de aplicación se ejecutan con `arcredix_app` (`NOLOGIN`, `NOBYPASSRLS`) mediante `options=-c role=arcredix_app`.
+- En rutas autenticadas, el servidor obtiene el JWT de Neon Auth y lo pasa al cliente `@neondatabase/serverless` mediante `authToken`.
+- `pg_session_jwt` expone el sujeto validado a funciones SQL `SECURITY DEFINER` con `search_path` fijo. Las políticas consultan membresía activa, rol del comercio o registro de superadmins.
+- Los planes y proveedores activos tienen lectura pública; operaciones de plataforma requieren la fila de superadmin activa.
+- `schema_migrations` no tiene RLS, pero no se concede al rol de aplicación.
+- Las políticas fueron probadas en una branch de Neon con dos tenants de prueba. Falta el smoke test local con el JWT real de Neon Auth antes de desplegar.
+
+## Persistencia y migraciones
+
+Las migraciones SQL versionadas son la fuente reproducible del esquema. `public.schema_migrations` registra versión, nombre, Git blob SHA-1, fecha y rol ejecutor. `npm run migrate` requiere `DATABASE_URL_UNPOOLED` (conexión directa, sin `-pooler`) y aplica cada archivo junto con su registro en una transacción.
+
+Antes de una migración se debe probar en una rama temporal de Neon, revisar el resultado y luego aplicarla a la rama principal. No editar manualmente el esquema sin agregar su migración correspondiente.
 
 
 ## Endpoints administrativos disponibles
