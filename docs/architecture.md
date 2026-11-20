@@ -110,3 +110,16 @@ Los vencimientos, recordatorios, reintentos de notificación y conciliaciones no
 ## Persistencia
 
 Las migraciones SQL versionadas son la fuente reproducible del esquema. Antes de una migración se debe probar en una rama temporal de Neon, revisar el resultado y luego aplicarla a la rama principal. No editar manualmente el esquema sin agregar su migración correspondiente.
+
+
+## Endpoints administrativos disponibles
+
+- `GET /api/admin/merchants`: cartera, filtros y estadísticas.
+- `PATCH /api/admin/merchants`: cambio de estado con motivo y auditoría.
+- `GET /api/admin/plans`: catálogo y cantidad de suscripciones actuales.
+- `POST /api/admin/plans`: alta de plan.
+- `PATCH /api/admin/plans`: edición de precio, límites, características y activación.
+- `GET /api/admin/subscriptions`: listado filtrable de suscripciones.
+- `PATCH /api/admin/subscriptions`: cambio de estado o extensión manual del período.
+
+Las pantallas `/admin/planes` y `/admin/suscripciones` consumen esos endpoints. La administración de planes y suscripciones es parcial: no sustituye los flujos automáticos de renovación, facturación o integración con proveedores.

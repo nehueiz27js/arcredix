@@ -6,7 +6,7 @@ Este documento distingue código existente, base de datos comprobada y trabajo p
 
 | Área | Estado | Evidencia |
 |---|---|---|
-| Next.js App Router + TypeScript | Build CI aprobado | GitHub Actions ejecutó `next build` correctamente en el commit de código `ea53e636c5cb4454e250d1d22cf6d277159dda24` |
+| Next.js App Router + TypeScript | Build CI aprobado | `next build` correcto en el commit `95ef0ace0d30e94fcd259712fd29ea78f401e624` |
 | Neon PostgreSQL | Configurado | Proyecto y rama principal inspeccionados |
 | Neon Auth | Parcial | Login y recuperación implementados; flujo de correo real pendiente de prueba |
 | Allowlist de superadmin | Implementada | Validación server-side por correo |
@@ -14,23 +14,24 @@ Este documento distingue código existente, base de datos comprobada y trabajo p
 | Esquema inicial | Aplicado | Nueve tablas iniciales verificadas en Neon |
 | Esquema operativo 0002 | Aplicado | Seis tablas nuevas e índices verificados |
 | Integridad y billing 0003 | Aplicado | FKs compuestas, `subscription_payments` y `scheduled_jobs` verificados |
-| Panel superadmin | Parcial | Listado y cambio de estado de comercios |
-| Alta integral de comercios | Pendiente | No existe flujo completo de alta e invitación |
+| Panel superadmin | Parcial | Comercios, planes y suscripciones tienen vistas administrativas |
+| Comercios | Parcial | Listado, filtros y cambio de estado; alta integral y edición completa pendientes |
+| Planes | Parcial | GET/POST/PATCH, alta, edición de precio/límite y activación desde el panel; precios anuales y pago único pendientes |
+| Suscripciones | Parcial | Listado, cambio de estado y extensión manual de 30 días con auditoría; ciclo de vida automático y cambio de plan pendientes |
 | Usuarios y permisos | Parcial | Roles y helper de autorización; administración e invitaciones pendientes |
-| Planes y suscripciones | Parcial | Catálogo y persistencia; ciclo de vida y billing incompletos |
 | Conexiones de pago y QR | Parcial | Estructura de datos; CRUD e integración real pendientes |
 | Firma webhook Mercado Pago | Helper y tests | Verificación HMAC y 4 pruebas unitarias; falta integración HTTP y consulta del pago original |
 | Conciliación de pagos | Pendiente | No hay conciliación operativa con proveedor |
-| Auditoría | Parcial | Cambio de estado de comercio registra auditoría |
+| Auditoría | Parcial | Cambios de comercio, planes y suscripciones generan registros |
 | Notificaciones | Estructura aplicada | Outbox creado; worker y proveedores pendientes |
 | Tareas programadas | Estructura aplicada | Cola persistente creada; worker y scheduler pendientes |
 | Reportes y exportaciones | Pendiente | Sin implementación integral |
 | Responsive | Parcial | Landing y paneles iniciales; revisión global pendiente |
-| UTF-8 | Aprobado | CI inspeccionó 56 archivos de texto sin errores |
+| UTF-8 | Aprobado | CI inspeccionó 63 archivos de texto sin errores |
 | Pruebas unitarias | Aprobadas | 4/4 pruebas de firma |
 | TypeScript | Aprobado | `tsc --noEmit` en GitHub Actions |
 | ESLint | Aprobado | `eslint .` en GitHub Actions |
-| Build | Aprobado en CI | `next build` en GitHub Actions con variables de entorno ficticias de CI |
+| Build | Aprobado en CI | `next build` en GitHub Actions con variables ficticias de CI |
 | Integración real | Pendiente | No se probaron credenciales productivas ni sandbox de proveedores |
 | Vercel | Sin deployment | No se ejecutó ningún deployment durante esta intervención |
 
@@ -53,8 +54,10 @@ Este documento distingue código existente, base de datos comprobada y trabajo p
 - [ ] Pruebas de acceso cruzado entre comercios.
 
 ### Hito C — Administración y suscripciones
-- [ ] CRUD integral de comercios y miembros.
-- [ ] Planes, límites, overrides y auditoría desde el panel.
+- [x] Listado y actualización de planes desde el superadmin.
+- [x] Listado, cambio de estado y extensión manual de suscripciones con auditoría.
+- [ ] Alta/edición integral de comercios y miembros.
+- [ ] Precios anuales, licencia de pago único y cambios de plan.
 - [ ] Ciclo de vida mensual, anual y pago único.
 - [ ] Vencimientos automáticos, gracia, suspensión y reactivación.
 - [x] Persistencia para pagos de suscripción y tareas programadas.
