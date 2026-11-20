@@ -1,13 +1,11 @@
 import { createHash } from 'node:crypto';
 
-/** Return the Git object SHA-1 for a UTF-8 blob (the same value stored by GitHub). */
 export function gitBlobSha1(content) {
   const bytes = Buffer.from(content, 'utf8');
-  const header = Buffer.from(`blob ${bytes.length}\0`, 'utf8');
+  const header = Buffer.from('blob ' + bytes.length + '\0', 'utf8');
   return createHash('sha1').update(header).update(bytes).digest('hex');
 }
 
-/** Split SQL at top-level semicolons, preserving quoted strings and comments. */
 export function splitSqlStatements(source) {
   const statements = [];
   let start = 0;
@@ -21,7 +19,7 @@ export function splitSqlStatements(source) {
     const next = source[i + 1];
 
     if (state === 'single') {
-      if (char === '\\\\') { i += 2; continue; }
+      if (char === '\\') { i += 2; continue; }
       if (char === "'") {
         if (next === "'") { i += 2; continue; }
         state = 'normal';
@@ -40,7 +38,7 @@ export function splitSqlStatements(source) {
     }
 
     if (state === 'line-comment') {
-      if (char === '\\n') state = 'normal';
+      if (char === '\n') state = 'normal';
       i += 1;
       continue;
     }
@@ -74,7 +72,7 @@ export function splitSqlStatements(source) {
     if (char === '/' && next === '*') { state = 'block-comment'; blockDepth = 1; i += 2; continue; }
 
     if (char === '$') {
-      const match = source.slice(i).match(/^\\$([A-Za-z_][A-Za-z0-9_]*|)\\$/);
+      const match = source.slice(i).match(/^\$([A-Za-z_][A-Za-z0-9_]*|)\$/);
       if (match) {
         dollarTag = match[0];
         state = 'dollar';
@@ -92,7 +90,7 @@ export function splitSqlStatements(source) {
   }
 
   if (state === 'single' || state === 'double' || state === 'block-comment' || state === 'dollar') {
-    throw new Error(`SQL migration ended inside an unterminated ${state} construct.`);
+    throw new Error('SQL migration ended inside an unterminated ' + state + ' construct.');
   }
 
   const finalStatement = source.slice(start).trim();
