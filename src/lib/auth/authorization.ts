@@ -121,7 +121,6 @@ export function hasMerchantPermission(
   const explicit = membership.permissions[permission];
 
   if (explicit === false) return false;
-  if (explicit === true) return true;
 
   return rolePermissions[membership.role].includes(permission);
 }
