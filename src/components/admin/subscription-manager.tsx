@@ -49,7 +49,7 @@ export function SubscriptionManager() {
   const load = useCallback(async () => {
     await Promise.resolve();
     setLoading(true);
-    setError();
+    setError('');
 
     try {
       const params = new URLSearchParams({ status: filter });
