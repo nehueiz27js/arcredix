@@ -73,7 +73,10 @@ export function MerchantManager() {
     } finally { setLoading(false); }
   }, [search, statusFilter]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [load]);
   useEffect(() => {
     fetch('/api/admin/plans', { cache: 'no-store' }).then(async (response) => {
       const payload = await response.json();
