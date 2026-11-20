@@ -7,5 +7,8 @@
 - Las migraciones 0002 y 0003 fueron probadas en ramas temporales de Neon y luego aplicadas a la rama principal. Se verificaron tablas, índices y restricciones.
 - Para tráfico de aplicación usar `DATABASE_URL` pooled. Reservar `DATABASE_URL_UNPOOLED` para migraciones y tareas administrativas que necesiten conexión directa.
 - Cada cambio futuro debe agregarse en un archivo numerado nuevo.
+- `0004_migration_ledger.sql` incorpora el ledger `public.schema_migrations` y registra como baseline las migraciones 0001–0003 solo después de verificar las tablas y restricciones existentes.
+- Ejecutar `npm run migrate` desde un entorno seguro con `DATABASE_URL_UNPOOLED` configurada (conexión directa, sin `-pooler`). El runner calcula el Git blob SHA-1 de cada archivo, detecta cambios en migraciones registradas y aplica cada migración junto con su registro en una transacción.
+- El runner no modifica la rama principal de Neon por sí mismo en CI; se ejecuta explícitamente contra la base elegida. No usar la URL pooled para DDL.
 - Toda migración debe probarse en una rama temporal, revisar sus resultados y documentar el resultado antes de aplicarse a la rama principal.
 - No ejecutar DDL destructivo sin autorización explícita.
