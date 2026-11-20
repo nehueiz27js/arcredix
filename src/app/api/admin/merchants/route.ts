@@ -137,10 +137,11 @@ export async function POST(request: Request) {
     `;
     const rows = Array.isArray(result) ? result : result.rows;
     if (!rows.length) return NextResponse.json({ error: 'El plan no existe o está inactivo.' }, { status: 400 });
+    const created = rows[0] as Record<string, unknown>;
     return NextResponse.json({
-      data: rows[0],
+      data: created,
       invitation: { url: `${new URL(request.url).origin}/aceptar-invitacion?token=${token}`,
-        expiresAt: rows[0].expires_at,
+        expiresAt: created.expires_at,
         message: 'Comercio creado. El titular debe aceptar la invitación para vincular su cuenta y definir la contraseña.' },
     }, { status: 201 });
   } catch (error) {
