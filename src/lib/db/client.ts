@@ -15,6 +15,7 @@ type Ed25519Jwk = {
 type JwksResponse = { keys?: Ed25519Jwk[] };
 
 let databaseClient: NeonClient | undefined;
+let systemDatabaseClient: NeonClient | undefined;
 let jwksCache: { keys: Ed25519Jwk[]; expiresAt: number } | undefined;
 let jwksRequest: Promise<Ed25519Jwk[]> | undefined;
 
@@ -164,6 +165,34 @@ export function getDatabase(authToken?: string, jwk?: Ed25519Jwk): NeonClient {
   }
 
   return databaseClient;
+}
+
+/**
+ * Privileged server-only client for the single credential-resolution query used
+ * by client login. Never use this client for tenant business data.
+ */
+export function getSystemDatabase(): NeonClient {
+  if (systemDatabaseClient) return systemDatabaseClient;
+
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) throw new Error('DATABASE_URL no está configurada.');
+
+  let parsed: URL;
+  try {
+    parsed = new URL(connectionString);
+  } catch {
+    throw new Error('DATABASE_URL no tiene un formato válido.');
+  }
+
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    throw new Error('DATABASE_URL debe ser una conexión PostgreSQL.');
+  }
+
+  // This server-only connection intentionally retains the owner role.
+  // It is restricted in code to a hash lookup; never expose it to user routes.
+  parsed.searchParams.delete('options');
+  systemDatabaseClient = neon(parsed.toString());
+  return systemDatabaseClient;
 }
 
 export async function getAuthenticatedDatabase(): Promise<NeonClient> {
