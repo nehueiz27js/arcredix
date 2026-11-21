@@ -81,6 +81,7 @@ const createSchema = z.object({
   tradeName: z.string().trim().min(2).max(200),
   holderRole: z.enum(['dueño','encargado','gerente','segundo_dueño']),
   email: z.string().trim().email().max(256),
+  password: z.string().min(8).max(128),
   dni: z.string().trim().min(6).max(20),
   planCode: z.enum(['starter','growth','business']),
   billingStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -91,15 +92,107 @@ const createSchema = z.object({
 export async function POST(request: Request) {
   const user = await authorize();
   if (!user) return NextResponse.json({ error: 'No autorizado.' }, { status: 403 });
+
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: 'Revisá los datos del cliente y el plan.' }, { status: 400 });
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Revisá los datos del cliente, la contraseña y el plan.' }, { status: 400 });
+  }
+
   const input = parsed.data;
   const email = input.email.toLowerCase();
   const ownerName = input.firstName + ' ' + input.lastName;
   const mappedRole = input.holderRole === 'dueño' ? 'owner' : input.holderRole === 'encargado' ? 'manager' : 'admin';
-  const labelNames: Record<typeof input.labelColor, string> = { rojo: 'Rojo', verde: 'Verde', azul: 'Azul', amarillo: 'Amarillo', violeta: 'Violeta' };
+  const labelNames: Record<typeof input.labelColor, string> = {
+    rojo: 'Rojo',
+    verde: 'Verde',
+    azul: 'Azul',
+    amarillo: 'Amarillo',
+    violeta: 'Violeta',
+  };
+
+  const authBaseUrl = process.env.NEON_AUTH_BASE_URL?.replace(/\/$/, '');
+  const sessionCookie = request.headers.get('cookie');
+  if (!authBaseUrl || !sessionCookie) {
+    return NextResponse.json({ error: 'No se pudo validar la sesión administrativa de Neon Auth.' }, { status: 503 });
+  }
+
+  let authUserId: string | null = null;
+  const provisionAuthUser = async () => {
+    const response = await fetch(authBaseUrl + '/admin/create-user', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: sessionCookie,
+        origin: new URL(request.url).origin,
+      },
+      body: JSON.stringify({
+        email,
+        password: input.password,
+        name: ownerName,
+        role: 'user',
+      }),
+      cache: 'no-store',
+    });
+
+    const payload = await response.json().catch(() => null) as {
+      id?: string;
+      user?: { id?: string };
+      message?: string;
+      error?: string;
+      code?: string;
+    } | null;
+
+    if (!response.ok) {
+      if (response.status === 409 || payload?.code === 'USER_ALREADY_EXISTS') {
+        throw new Error('Ese Gmail ya tiene una cuenta registrada en ARCREDIX.');
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Neon Auth rechazó la operación administrativa. Cerrá sesión y volvé a ingresar.');
+      }
+      throw new Error(payload?.message || payload?.error || 'Neon Auth no pudo crear la cuenta del cliente.');
+    }
+
+    const id = payload?.id ?? payload?.user?.id;
+    if (!id) throw new Error('Neon Auth respondió sin el identificador de la cuenta creada.');
+    return id;
+  };
+
+  const rollbackAuthUser = async (authUserIdToDelete: string) => {
+    try {
+      await fetch(authBaseUrl + '/admin/remove-user', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: sessionCookie,
+          origin: new URL(request.url).origin,
+        },
+        body: JSON.stringify({ userId: authUserIdToDelete }),
+        cache: 'no-store',
+      });
+    } catch (rollbackError) {
+      console.error('ARCREDIX auth user compensation failed:', rollbackError);
+    }
+  };
+
   try {
     const sql = await getAuthenticatedDatabase();
+
+    const existing = await sql`
+      SELECT id FROM public.merchants WHERE lower(email)=${email} LIMIT 1
+    `;
+    if ((Array.isArray(existing) ? existing : existing.rows).length) {
+      return NextResponse.json({ error: 'Ya existe un comercio registrado con ese Gmail.' }, { status: 409 });
+    }
+
+    const planCheck = await sql`
+      SELECT id FROM public.plans WHERE code=${input.planCode} AND is_active=true LIMIT 1
+    `;
+    if (!(Array.isArray(planCheck) ? planCheck : planCheck.rows).length) {
+      return NextResponse.json({ error: 'El plan seleccionado no existe o está inactivo.' }, { status: 400 });
+    }
+
+    authUserId = await provisionAuthUser();
+
     const result = await sql`
       WITH plan AS (
         SELECT id, monthly_price_usd FROM public.plans WHERE code=${input.planCode} AND is_active=true
@@ -116,24 +209,36 @@ export async function POST(request: Request) {
           jsonb_build_object('created_by',${user.email},'source','superadmin')
         FROM merchant m CROSS JOIN plan p RETURNING id,merchant_id
       ), membership AS (
-        INSERT INTO public.merchant_users (merchant_id,email,full_name,role,status)
-        SELECT id,${email},${ownerName},${mappedRole},'invited' FROM merchant RETURNING merchant_id
+        INSERT INTO public.merchant_users (merchant_id,auth_subject,email,full_name,role,status)
+        SELECT id,${authUserId},${email},${ownerName},${mappedRole},'active' FROM merchant RETURNING merchant_id
       ), audit AS (
         INSERT INTO public.audit_logs (merchant_id,actor_type,action,entity_type,entity_id,reason,after_data)
-        SELECT id,'superadmin','merchant.created','merchant',id,'Alta simplificada desde superadmin',
-          jsonb_build_object('email',${email},'plan',${input.planCode},'billing_start',${input.billingStartDate},'holder_role',${input.holderRole})
+        SELECT id,'superadmin','merchant.created','merchant',id,'Alta con cuenta Neon Auth desde superadmin',
+          jsonb_build_object('email',${email},'auth_user_id',${authUserId},'plan',${input.planCode},'billing_start',${input.billingStartDate},'holder_role',${input.holderRole})
         FROM merchant RETURNING id
       )
       SELECT m.id,m.created_at,s.id AS subscription_id,mm.merchant_id
       FROM merchant m JOIN subscription s ON s.merchant_id=m.id
       JOIN membership mm ON mm.merchant_id=m.id CROSS JOIN audit
     `;
+
     const rows = Array.isArray(result) ? result : result.rows;
-    if (!rows.length) return NextResponse.json({ error: 'El plan no existe o está inactivo.' }, { status: 400 });
-    return NextResponse.json({ data: rows[0], access: { status: 'pending', message: 'La cuenta de acceso Neon Auth aún requiere provisionamiento seguro.' } }, { status: 201 });
+    if (!rows.length) {
+      await rollbackAuthUser(authUserId);
+      authUserId = null;
+      return NextResponse.json({ error: 'No se pudo completar el alta comercial. La cuenta de acceso fue revertida.' }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      data: rows[0],
+      access: { status: 'created', authUserId, email },
+    }, { status: 201 });
   } catch (error) {
+    if (authUserId) await rollbackAuthUser(authUserId);
     console.error('ARCREDIX admin merchants POST failed:', error);
-    return NextResponse.json({ error: 'No se pudo crear el cliente. Verificá que el Gmail no esté registrado.' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'No se pudo crear el cliente.';
+    const status = message.includes('Gmail ya') ? 409 : message.includes('Neon Auth rechazó') ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
