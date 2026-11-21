@@ -56,7 +56,13 @@ export async function GET(request: Request) {
         count(*) FILTER (WHERE status='pending')::int AS merchants_pending,
         count(*) FILTER (WHERE status='active')::int AS merchants_active,
         count(*) FILTER (WHERE status='suspended')::int AS merchants_suspended,
-        count(*) FILTER (WHERE status='cancelled')::int AS merchants_cancelled
+        count(*) FILTER (WHERE status='cancelled')::int AS merchants_cancelled,
+        count(*) FILTER (WHERE status='active' AND EXISTS (
+          SELECT 1 FROM public.subscriptions s
+          WHERE s.merchant_id=merchants.id AND s.status='active'
+            AND s.current_period_end >= now()
+            AND s.current_period_end <= now() + interval '7 days'
+        ))::int AS merchants_due_soon
         FROM public.merchants`,
     ]);
     const merchants = Array.isArray(merchantResult) ? merchantResult : merchantResult.rows;
