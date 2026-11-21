@@ -16,6 +16,8 @@ type Merchant = {
   connection_limit: number | null; plan_features: Record<string, unknown> | null;
   users_count: number; connections_count: number; registers_count: number; qr_count: number;
   access_key_hint: string | null;
+  access_key_expires_at: string | null;
+  last_login_at: string | null;
 };
 type Stats = { merchants_total: number; merchants_pending: number; merchants_active: number; merchants_suspended: number; merchants_cancelled: number };
 const emptyStats: Stats = { merchants_total: 0, merchants_pending: 0, merchants_active: 0, merchants_suspended: 0, merchants_cancelled: 0 };
@@ -54,7 +56,7 @@ export function MerchantManager() {
   const [generatedAccess, setGeneratedAccess] = useState<{ identifier: string } | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const initialForm = { ownerName: '', phone: '', email: '', planCode: '', labelName: '', labelColor: 'verde' as LabelColor, tradeName: '' };
+  const initialForm = { ownerName: '', phone: '', email: '', planCode: '', labelName: '', labelColor: 'verde' as LabelColor, tradeName: '', days: '0' };
   const [form, setForm] = useState(initialForm);
   const [plansError, setPlansError] = useState('');
 
@@ -184,7 +186,7 @@ export function MerchantManager() {
 
         {showCreate && <form onSubmit={createMerchant} className="mt-5 rounded-xl border border-emerald-300/20 bg-[#07111a] p-4">
           <h3 className="font-semibold">Alta de cliente</h3>
-          <p className="mt-1 text-xs text-slate-400">ARCREDIX genera automáticamente el identificador y lo guarda protegido en Neon.</p>
+          <p className="mt-1 text-xs text-slate-400">ARCREDIX genera un código único. Solo se guarda su hash y el código completo se muestra una vez.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <label className="text-xs text-slate-400">Nombre del titular<input required value={form.ownerName} onChange={(event) => setForm((current) => ({ ...current, ownerName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
             <label className="text-xs text-slate-400">Número de teléfono<input required type="tel" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} placeholder="+54 9 ..." className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
@@ -192,6 +194,7 @@ export function MerchantManager() {
             <label className="text-xs text-slate-400">Plan<select required value={form.planCode} onChange={(event) => setForm((current) => ({ ...current, planCode: event.target.value }))} disabled={plans.length === 0} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="">Seleccionar plan</option>{plans.map((plan) => <option key={plan.code} value={plan.code}>{plan.name} · {money(plan.monthly_price_usd)}/mes</option>)}</select></label>
             <label className="text-xs text-slate-400">Etiqueta<input required maxLength={40} value={form.labelName} onChange={(event) => setForm((current) => ({ ...current, labelName: event.target.value }))} placeholder="Ej. Cliente prioritario" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
             <label className="text-xs text-slate-400">Nombre comercial<input required value={form.tradeName} onChange={(event) => setForm((current) => ({ ...current, tradeName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Vigencia del identificador (días; 0 = sin vencimiento)<input type="number" min="0" max="3650" value={form.days} onChange={(event) => setForm((current) => ({ ...current, days: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
           </div>
           {plansError && <p role="alert" className="mt-3 text-sm text-red-300">{plansError}</p>}
           <div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setShowCreate(false)} className="rounded-lg border border-white/15 px-4 py-2 text-sm">Cancelar</button><button disabled={creating || plans.length === 0} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-semibold text-[#04130e] disabled:opacity-50">{creating ? 'Creando…' : 'Crear cliente'}</button></div>
@@ -235,6 +238,7 @@ export function MerchantManager() {
                 {merchant.access_key_hint ? <div className="mt-2">
                   <code className="text-xs text-emerald-200">••••-••••-••••-{merchant.access_key_hint}</code>
                   <p className="mt-1 text-xs text-slate-500">Por seguridad, el código completo no se conserva. Si se perdió, regeneralo.</p>
+                  <p className="mt-1 text-xs text-slate-500">Vigencia: {dateLabel(merchant.access_key_expires_at)} · Último acceso: {dateLabel(merchant.last_login_at)}</p>
                 </div> : <p className="mt-1 text-xs text-amber-200">Sin identificador asignado. Regenerá uno para habilitar el acceso.</p>}
               </div>
               <div className="mt-4 grid gap-2 text-xs text-slate-400 sm:grid-cols-2 xl:grid-cols-4">
