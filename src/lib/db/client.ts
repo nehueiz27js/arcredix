@@ -4,6 +4,16 @@ import { neon, Pool } from '@neondatabase/serverless';
 import { auth } from '@/lib/auth/server';
 
 type NeonClient = ReturnType<typeof neon>;
+type AuthenticatedQueryResult = {
+  rows: Record<string, unknown>[];
+  rowCount: number | null;
+};
+type AuthenticatedSql = ((
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+) => Promise<AuthenticatedQueryResult>) & {
+  query: (text: string, values?: unknown[]) => Promise<AuthenticatedQueryResult>;
+};
 type Ed25519Jwk = {
   kty: 'OKP';
   crv: 'Ed25519';
@@ -196,6 +206,12 @@ export function getSystemDatabase(): NeonClient {
  * cannot provide session startup parameters, so each tagged query gets a short
  * WebSocket-backed transaction with the JWK already supplied by Pool.
  */
+/**
+ * Authenticated PostgreSQL queries must use a real startup packet because
+ * pg_session_jwt.jwk is a startup-only parameter. The HTTP neon() query function
+ * cannot provide session startup parameters, so each query gets a short
+ * WebSocket-backed transaction with the JWK already supplied by Pool.
+ */
 export async function getAuthenticatedDatabase(): Promise<AuthenticatedSql> {
   const tokenEndpoint = auth.token as unknown as () => Promise<{
     data?: { token?: string } | null;
@@ -211,12 +227,7 @@ export async function getAuthenticatedDatabase(): Promise<AuthenticatedSql> {
   const jwk = await getJwkForToken(token);
   const connectionString = getDatabaseUrl(jwk);
 
-  const authenticatedSql: AuthenticatedSql = async (strings, ...values) => {
-    const queryText = strings.reduce(
-      (query, part, index) => query + (index === 0 ? '' : `$${index}`) + part,
-      '',
-    );
-
+  const execute = async (queryText: string, values: unknown[] = []): Promise<AuthenticatedQueryResult> => {
     const pool = new Pool({
       connectionString,
       max: 1,
@@ -224,36 +235,51 @@ export async function getAuthenticatedDatabase(): Promise<AuthenticatedSql> {
       idleTimeoutMillis: 1000,
     });
 
-    let client: Awaited<ReturnType<typeof pool.connect>> | undefined;
-    let transactionStarted = false;
-
     try {
-      client = await pool.connect();
-      await client.query('BEGIN');
-      transactionStarted = true;
+      const client = await pool.connect();
+      let transactionStarted = false;
 
-      // JWK is already present in the WebSocket connection startup packet.
-      await client.query('SELECT auth.init()');
-      await client.query('SELECT auth.jwt_session_init($1)', [token]);
+      try {
+        await client.query('BEGIN');
+        transactionStarted = true;
 
-      const result = await client.query(queryText, values);
-      await client.query('COMMIT');
-      transactionStarted = false;
+        // JWK is already present in the WebSocket connection startup packet.
+        await client.query('SELECT auth.init()');
+        await client.query('SELECT auth.jwt_session_init($1)', [token]);
 
-      return {
-        rows: result.rows as Record<string, unknown>[],
-        rowCount: result.rowCount,
-      };
-    } catch (error) {
-      if (client && transactionStarted) {
-        await client.query('ROLLBACK').catch(() => undefined);
+        const result = await client.query(queryText, values);
+        await client.query('COMMIT');
+        transactionStarted = false;
+
+        return {
+          rows: result.rows as Record<string, unknown>[],
+          rowCount: result.rowCount,
+        };
+      } catch (error) {
+        if (transactionStarted) {
+          await client.query('ROLLBACK').catch(() => undefined);
+        }
+        throw error;
+      } finally {
+        client.release();
       }
-      throw error;
     } finally {
-      client?.release();
       await pool.end();
     }
   };
 
-  return authenticatedSql;
+  const taggedQuery = async (
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ): Promise<AuthenticatedQueryResult> => {
+    const queryText = strings.reduce(
+      (query, part, index) => query + (index === 0 ? '' : `$${index}`) + part,
+      '',
+    );
+    return execute(queryText, values);
+  };
+
+  return Object.assign(taggedQuery, {
+    query: (queryText: string, values: unknown[] = []) => execute(queryText, values),
+  });
 }
