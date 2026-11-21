@@ -1,81 +1,75 @@
+import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
-import { auth } from '@/lib/auth/server';
-import { hashAccessKey } from '@/lib/auth/access-keys';
+import { createClientSession } from '@/lib/auth/client-session';
+import { hashAccessKey, normalizeAccessIdentifier } from '@/lib/auth/access-keys';
 import { getSystemDatabase } from '@/lib/db/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-type NeonAuthApi = {
-  signInEmail(options: {
-    body: { email: string; password: string };
-    headers: Headers;
-    asResponse: true;
-  }): Promise<Response>;
-};
+type LoginRow = { id: string; auth_subject: string | null };
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { identifier?: unknown } | null;
-  const identifier = typeof body?.identifier === 'string' ? body.identifier.trim() : '';
-
-  // 32 random bytes encoded as base64url produce exactly 43 characters.
-  if (!/^[A-Za-z0-9_-]{43}$/.test(identifier)) {
-    return NextResponse.json({ error: 'Identificador inválido.' }, { status: 400 });
-  }
+  const rawIdentifier = typeof body?.identifier === 'string' ? body.identifier : '';
+  const normalized = normalizeAccessIdentifier(rawIdentifier);
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  const ip = (forwardedFor || request.headers.get('x-real-ip') || 'unknown').slice(0, 100);
 
   try {
     const sql = getSystemDatabase();
+    const attempts = await sql`
+      SELECT count(*)::int AS failures
+      FROM public.login_attempts
+      WHERE ip = ${ip} AND scope = 'client' AND success = false
+        AND created_at > now() - interval '15 minutes'
+    `;
+    if (Number(attempts[0]?.failures ?? 0) >= 5) {
+      return NextResponse.json(
+        { error: 'Demasiados intentos. El acceso quedó bloqueado durante 15 minutos.' },
+        { status: 429 },
+      );
+    }
+
+    if (!/^[A-Z2-9]{16}$/.test(normalized)) {
+      await sql`INSERT INTO public.login_attempts (ip, scope, success) VALUES (${ip}, 'client', false)`;
+      return NextResponse.json({ error: 'Identificador inválido.' }, { status: 401 });
+    }
+
     const result = await sql`
-      SELECT mu.auth_subject, mu.email
+      SELECT mu.id, mu.auth_subject
       FROM public.merchant_users mu
       INNER JOIN public.merchants m ON m.id = mu.merchant_id
-      WHERE mu.access_key_hash = ${hashAccessKey(identifier)}
+      WHERE mu.access_key_hash = ${hashAccessKey(normalized)}
         AND mu.status = 'active'
         AND m.status = 'active'
       LIMIT 1
     `;
-    const rows = Array.isArray(result) ? result : result.rows;
-    const membership = rows[0] as { auth_subject: string | null; email: string } | undefined;
+    const membership = result[0] as LoginRow | undefined;
 
-    if (!membership?.auth_subject || !membership.email) {
-      return NextResponse.json({ error: 'El identificador no es válido o el comercio está suspendido.' }, { status: 401 });
+    if (!membership) {
+      await sql`INSERT INTO public.login_attempts (ip, scope, success) VALUES (${ip}, 'client', false)`;
+      return NextResponse.json({ error: 'Identificador inválido, vencido o desactivado.' }, { status: 401 });
     }
 
-    // The access identifier is the hidden Neon Auth password. The customer
-    // only submits the identifier; the email and password never reach the UI.
-    const api = (auth as unknown as { api: NeonAuthApi }).api;
-    const authResponse = await api.signInEmail({
-      body: { email: membership.email, password: identifier },
-      headers: request.headers,
-      asResponse: true,
-    });
+    const subject = membership.auth_subject || randomUUID();
+    await sql`
+      UPDATE public.merchant_users
+      SET auth_subject = ${subject}, last_login_at = now(), updated_at = now()
+      WHERE id = ${membership.id}
+    `;
+    await sql`INSERT INTO public.login_attempts (ip, scope, success) VALUES (${ip}, 'client', true)`;
+    await createClientSession(subject);
 
-    if (!authResponse.ok) {
-      console.error('ARCREDIX client access sign-in rejected:', authResponse.status);
-      return NextResponse.json({ error: 'No se pudo validar el acceso. Contactá al administrador.' }, { status: 401 });
-    }
-
-    const authPayload = await authResponse.clone().json().catch(() => null) as {
-      user?: { id?: string };
-      data?: { user?: { id?: string } };
-    } | null;
-    const authenticatedUserId = authPayload?.user?.id ?? authPayload?.data?.user?.id;
-
-    if (!authenticatedUserId || authenticatedUserId !== membership.auth_subject) {
-      console.error('ARCREDIX client access identity mismatch.');
-      return NextResponse.json({ error: 'No se pudo validar la identidad vinculada al comercio.' }, { status: 401 });
-    }
-
-    const headers = new Headers(authResponse.headers);
-    headers.delete('content-length');
-    headers.set('cache-control', 'no-store');
-    return new NextResponse(JSON.stringify({ success: true }), {
-      status: 200,
-      headers,
+    return NextResponse.json({ success: true }, {
+      headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error) {
-    console.error('ARCREDIX client login failed:', error);
-    return NextResponse.json({ error: 'No se pudo validar el identificador. Intentá nuevamente.' }, { status: 500 });
+    console.error('ARCREDIX client identifier login failed:', error);
+    return NextResponse.json(
+      { error: 'No se pudo validar el identificador. Intentá nuevamente.' },
+      { status: 500 },
+    );
   }
 }
