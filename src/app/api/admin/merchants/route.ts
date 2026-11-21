@@ -176,12 +176,12 @@ export async function POST(request: Request) {
       ), merchant AS (
         INSERT INTO public.merchants (legal_name,trade_name,owner_name,email,whatsapp_phone,tax_id,status,metadata)
         SELECT ${input.tradeName},${input.tradeName},${ownerName},${email},${input.whatsappPhone},${input.dni},
-          'pending',jsonb_build_object('admin_label',jsonb_build_object('name',${labelNames[input.labelColor]},'color',${input.labelColor}),
+          'active',jsonb_build_object('admin_label',jsonb_build_object('name',${labelNames[input.labelColor]},'color',${input.labelColor}),
           'holder_role',${input.holderRole},'dni',${input.dni})
         FROM plan RETURNING id,created_at
       ), subscription AS (
         INSERT INTO public.subscriptions (merchant_id,plan_id,status,billing_interval,price_usd,starts_at,current_period_start,current_period_end,metadata)
-        SELECT m.id,p.id,'pending','month',p.monthly_price_usd,${input.billingStartDate}::date,
+        SELECT m.id,p.id,'active','month',p.monthly_price_usd,${input.billingStartDate}::date,
           ${input.billingStartDate}::date,${input.billingStartDate}::date + interval '30 days',
           jsonb_build_object('created_by',${user.email},'source','superadmin')
         FROM merchant m CROSS JOIN plan p RETURNING id,merchant_id
