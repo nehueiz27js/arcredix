@@ -45,10 +45,15 @@ function getDatabaseUrl(jwk?: Ed25519Jwk): string {
 
   if (jwk) {
     // pg_session_jwt reads this startup parameter before validating auth.jwt_session_init().
+    // pg_session_jwt matches the JWT header kid against the configured JWK.
+    // Omitting kid here makes a valid Neon Auth token fail with `jwk not found`.
     options.push("-c pg_session_jwt.jwk='" + JSON.stringify({
       kty: jwk.kty,
       crv: jwk.crv,
       x: jwk.x,
+      ...(jwk.kid ? { kid: jwk.kid } : {}),
+      ...(jwk.alg ? { alg: jwk.alg } : {}),
+      ...(jwk.use ? { use: jwk.use } : {}),
     }) + "'");
   }
 
