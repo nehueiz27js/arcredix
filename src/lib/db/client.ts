@@ -203,7 +203,7 @@ export async function getAuthenticatedDatabase(): Promise<NeonClient> {
   // does not initialize pg_session_jwt. The extension requires both calls
   // below to run on the same connection and transaction as the protected SQL.
   const raw = neon(getDatabaseUrl(jwk));
-  return new Proxy(raw, {
+  const authenticated = new Proxy(raw, {
     apply(target, thisArg, args: Parameters<NeonClient>) {
       const initializeJwk = target`SELECT auth.init()`;
       const initializeJwt = target`SELECT auth.jwt_session_init(${token})`;
@@ -216,4 +216,6 @@ export async function getAuthenticatedDatabase(): Promise<NeonClient> {
       ]).then((results) => results[2]);
     },
   });
+
+  return authenticated as NeonClient;
 }
