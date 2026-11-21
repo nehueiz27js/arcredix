@@ -99,3 +99,22 @@ Este documento distingue código existente, base de datos comprobada y trabajo p
 ## Bloqueos externos
 
 La integración real de Mercado Pago, WhatsApp y correo productivo necesita credenciales, permisos y configuración de las cuentas propietarias. No se simulará su funcionamiento ni se marcarán como conectados hasta realizar pruebas reales.
+
+
+## Integraciones financieras (implementación preparada)
+
+| Área | Estado | Alcance real |
+|---|---|---|
+| Credenciales de proveedores | Código preparado | AES-256-GCM y tabla separada `payment_connection_secrets`; pendiente aplicar migración 0006 en Neon main |
+| Gmail OAuth por comercio | Código preparado | OAuth offline, PKCE, `gmail.readonly`, refresh token cifrado y perfil de casilla |
+| Gmail Push | Código preparado | Gmail Watch, Pub/Sub push con OIDC verificado por JWKS de Google y procesamiento de `history.list` |
+| Remitentes bancarios | Código preparado | Lista exacta por comercio; mensajes no permitidos se ignoran |
+| Avisos bancarios | Evidencia no verificada | Se guardan con estado `unknown`; nunca se aprueban por correo solamente; parser heurístico requiere pruebas por banco |
+| Renovación Gmail Watch | Código preparado | Endpoint `/api/cron/gmail-watch`; requiere programar una ejecución diaria y configurar `ARCREDIX_CRON_SECRET` |
+| Mercado Pago OAuth | Código preparado | Conexión individual de vendedores, credenciales cifradas y refresh de tokens |
+| Mercado Pago webhook | Código preparado | Firma HMAC, identificación por `user_id`, consulta de pago original y conciliación de estado/importe/cuenta |
+| Ualá Bis | No implementada | Catálogo informativo; no afirmar soporte para transferencias entrantes generales |
+| Rol de webhooks | Código preparado | `arcredix_webhook` y `ARCREDIX_WEBHOOK_DATABASE_URL`; requiere aplicar migraciones 0006–0007 y configurar la URL privada |
+| Pruebas externas | Pendientes | OAuth Google, Pub/Sub, Mercado Pago sandbox y flujo de caja todavía no ejecutados |
+
+**No activar en producción** hasta aplicar y verificar migraciones, configurar credenciales externas, ejecutar pruebas sandbox y revisar la conciliación con caja.

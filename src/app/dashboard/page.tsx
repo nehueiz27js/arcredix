@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { Building2, Clock3, ShieldCheck } from 'lucide-react';
 
 import { SignOutButton } from '@/components/auth/sign-out-button';
@@ -128,6 +129,8 @@ export default async function DashboardPage() {
             <SignOutButton />
           </div>
         </header>
+
+        <section className="mb-5 rounded-xl border border-emerald-300/20 bg-emerald-300/5 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Conexiones financieras</h2><p className="mt-1 text-sm text-slate-400">Vinculá tus billeteras y bancos por correo.</p></div><Link href="/dashboard/conexiones" className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-semibold text-[#04130e]">Administrar conexiones</Link></div></section>
 
         <section className="grid gap-4 md:grid-cols-2">
           <article className="rounded-2xl border border-white/10 bg-[#0b1721] p-6">

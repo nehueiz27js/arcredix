@@ -12,3 +12,10 @@
 - El runner no modifica la rama principal de Neon por sí mismo en CI; se ejecuta explícitamente contra la base elegida. No usar la URL pooled para DDL.
 - Toda migración debe probarse en una rama temporal, revisar sus resultados y documentar el resultado antes de aplicarse a la rama principal.
 - No ejecutar DDL destructivo sin autorización explícita.
+
+
+## Migraciones de integraciones financieras
+
+- `0006_financial_integrations.sql`: catálogo de proveedores, secretos OAuth cifrados, Gmail push y funciones acotadas para registrar evidencia/consultar conexiones desde callbacks autenticados.
+- `0007_integration_maintenance.sql`: rol de base de datos restringido para webhooks y función de renovación de Gmail Watch y actualización segura de credenciales.
+- Ejecutar `npm run migrate` solo después de revisar las migraciones y configurar `DATABASE_URL_UNPOOLED` con el usuario propietario.

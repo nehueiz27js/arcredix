@@ -91,3 +91,22 @@ No reutilizar credenciales de la cuenta de un comercio para cobrar la suscripci�
 - Verificación de consentimiento, deduplicación y reintentos de notificaciones.
 - Revisión de secretos, variables de entorno, logs y backups.
 - Prueba integral con credenciales de sandbox antes de cualquier cuenta productiva.
+
+
+## Gmail y notificaciones bancarias
+
+- Cada comercio autoriza su propia casilla mediante Google OAuth; ARCREDIX solicita `gmail.readonly` y acceso offline. No solicita contraseñas.
+- Gmail Push utiliza Cloud Pub/Sub. El servicio de Gmail debe tener permiso `pubsub.topics.publish` sobre el tópico configurado.
+- La suscripción push debe enviar un ID token OIDC con audiencia configurada; ARCREDIX valida firma RS256 con las claves públicas de Google, issuer, audiencia, expiración y service account.
+- Gmail Watch debe renovarse al menos cada siete días; ARCREDIX expone `/api/cron/gmail-watch`, protegido por `ARCREDIX_CRON_SECRET`, para ejecutarlo diariamente.
+- Los remitentes se configuran por comercio. Los mensajes que no coinciden exactamente con la lista se ignoran.
+- Los avisos se guardan como transacciones `unknown` con `provider_status=email_notice_unverified`. No habilitan entrega ni se presentan como pagos aprobados.
+- La extracción de importe es heurística y solo sirve para registrar evidencia pendiente; cada banco requiere pruebas de formato y reglas específicas antes de considerar automatización confiable.
+- Los endpoints de proveedor usan `ARCREDIX_WEBHOOK_DATABASE_URL`, con startup role `arcredix_webhook`. No deben usar el rol normal de aplicación para resolver credenciales de otros comercios.
+
+## Webhooks de billeteras
+
+- Mercado Pago recibe notificaciones en `/api/webhooks/mercado-pago`. La URL se registra una vez en la aplicación de ARCREDIX; el `user_id` identifica la cuenta vendedora autorizada.
+- Se valida `x-signature` y `x-request-id`; después se consulta el pago original con el token OAuth del comercio y se verifica `collector_id`, importe, moneda y estado.
+- Los tokens OAuth se cifran con AES-256-GCM y se renuevan cuando vencen. La firma debe configurarse en `MERCADO_PAGO_WEBHOOK_SECRET`.
+- La integración de Ualá Bis no se marca como disponible para transferencias entrantes generales: primero debe verificarse el producto y el endpoint de consulta que expone al comercio.
