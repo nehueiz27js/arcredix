@@ -99,6 +99,7 @@ export async function getCurrentMerchantMembership(): Promise<MerchantMembership
     WHERE mu.auth_subject = ${user.id}
       AND mu.status = 'active'
       AND m.status = 'active'
+      AND (mu.access_key_expires_at IS NULL OR mu.access_key_expires_at > now())
     LIMIT 1
   `;
 
