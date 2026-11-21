@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createHmac, randomInt } from 'node:crypto';
+import { createHash, createHmac, randomInt } from 'node:crypto';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -31,6 +31,10 @@ export function normalizeAccessIdentifier(value: string): string {
 }
 
 /** Only a keyed HMAC is persisted; the clear identifier is returned once. */
+export function hashLegacyAccessKey(identifier: string): string {
+  return createHash('sha256').update(identifier, 'utf8').digest('hex');
+}
+
 export function hashAccessKey(identifier: string): string {
   return createHmac('sha256', pepper())
     .update(normalizeAccessIdentifier(identifier), 'utf8')
