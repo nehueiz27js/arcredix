@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       WHERE ip = ${ip} AND scope = 'client' AND success = false
         AND created_at > now() - interval '15 minutes'
     `;
-    const attemptRows = Array.isArray(attempts) ? attempts : attempts.rows;
+    const attemptRows = (Array.isArray(attempts) ? attempts : attempts.rows) as { failures: number }[];
     if (Number(attemptRows[0]?.failures ?? 0) >= 5) {
       return NextResponse.json(
         { error: 'Demasiados intentos. El acceso quedó bloqueado durante 15 minutos.' },
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         AND m.status = 'active'
       LIMIT 1
     `;
-    const rows = Array.isArray(result) ? result : result.rows;
+    const rows = (Array.isArray(result) ? result : result.rows) as LoginRow[];
     const membership = rows[0] as LoginRow | undefined;
 
     if (!membership) {
