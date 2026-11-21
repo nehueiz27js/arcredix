@@ -48,6 +48,7 @@ export async function POST(request: Request) {
       WHERE mu.access_key_hash = ${identifierHash}
         AND mu.status = 'active'
         AND m.status = 'active'
+        AND (mu.access_key_expires_at IS NULL OR mu.access_key_expires_at > now())
       LIMIT 1
     `;
     const rows = (Array.isArray(result) ? result : result.rows) as LoginRow[];
