@@ -3,6 +3,7 @@ import 'server-only';
 import { auth } from '@/lib/auth/server';
 import { isSuperAdminEmail } from '@/lib/auth/superadmin';
 import { getAuthenticatedDatabase } from '@/lib/db/client';
+import { readClientSession } from '@/lib/auth/client-session';
 
 export type MerchantRole = 'owner' | 'admin' | 'manager' | 'operator' | 'viewer';
 
@@ -22,6 +23,8 @@ export interface MerchantMembership {
   merchantId: string;
   role: MerchantRole;
   permissions: Record<string, boolean>;
+  email: string;
+  fullName: string | null;
 }
 
 const rolePermissions: Record<MerchantRole, readonly MerchantPermission[]> = {
@@ -78,7 +81,8 @@ export async function requireSuperAdmin() {
  * subject. Never accept merchantId from an untrusted request as authority.
  */
 export async function getCurrentMerchantMembership(): Promise<MerchantMembership | null> {
-  const user = await getAuthenticatedUser();
+  const clientSession = await readClientSession();
+  const user = clientSession ? { id: clientSession.sub } : await getAuthenticatedUser();
   if (!user?.id) return null;
 
   const sql = await getAuthenticatedDatabase();
@@ -87,7 +91,9 @@ export async function getCurrentMerchantMembership(): Promise<MerchantMembership
       mu.id AS membership_id,
       mu.merchant_id,
       mu.role,
-      mu.permissions
+      mu.permissions,
+      mu.email,
+      mu.full_name
     FROM public.merchant_users mu
     INNER JOIN public.merchants m ON m.id = mu.merchant_id
     WHERE mu.auth_subject = ${user.id}
@@ -102,6 +108,8 @@ export async function getCurrentMerchantMembership(): Promise<MerchantMembership
     merchant_id: string;
     role: MerchantRole;
     permissions: Record<string, boolean> | null;
+    email: string;
+    full_name: string | null;
   } | undefined;
 
   if (!membership || !(membership.role in rolePermissions)) return null;
@@ -111,6 +119,8 @@ export async function getCurrentMerchantMembership(): Promise<MerchantMembership
     merchantId: membership.merchant_id,
     role: membership.role,
     permissions: membership.permissions ?? {},
+    email: membership.email,
+    fullName: membership.full_name,
   };
 }
 
