@@ -13,3 +13,5 @@ CREATE UNIQUE INDEX IF NOT EXISTS merchant_users_access_key_hash_uq
 -- Superadmin provisions the internal Neon Auth identity and links it to a merchant.
 -- RLS still restricts these writes to an authenticated platform administrator.
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.merchant_users TO arcredix_app;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.merchants TO arcredix_app;
