@@ -45,11 +45,11 @@ function getDatabaseUrl(jwk?: Ed25519Jwk): string {
 
   if (jwk) {
     // pg_session_jwt reads this startup parameter before validating auth.jwt_session_init().
-    options.push('-c pg_session_jwt.jwk=' + JSON.stringify({
+    options.push("-c pg_session_jwt.jwk='" + JSON.stringify({
       kty: jwk.kty,
       crv: jwk.crv,
       x: jwk.x,
-    }));
+    }) + "'");
   }
 
   parsed.searchParams.set('options', options.filter(Boolean).join(' '));
