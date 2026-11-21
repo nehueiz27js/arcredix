@@ -25,7 +25,7 @@ export function SignOutButton({ mode = 'admin' }: SignOutButtonProps) {
         const { authClient } = await import('@/lib/auth/client');
         await authClient.signOut();
       }
-      router.replace(mode === 'admin' ? '/admin/login' : '/login');
+      router.replace(mode === 'admin' ? '/admin/login' : '/portal/login');
       router.refresh();
     } finally {
       setBusy(false);
