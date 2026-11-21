@@ -29,7 +29,7 @@ let systemDatabaseClient: NeonClient | undefined;
 let jwksCache: { keys: Ed25519Jwk[]; expiresAt: number } | undefined;
 let jwksRequest: Promise<Ed25519Jwk[]> | undefined;
 
-function getDatabaseUrl(jwk?: Ed25519Jwk): string {
+function getDatabaseUrl(): string {
   const connectionString = process.env.DATABASE_URL?.trim();
 
   if (!connectionString) {
@@ -47,27 +47,44 @@ function getDatabaseUrl(jwk?: Ed25519Jwk): string {
     throw new Error('DATABASE_URL debe ser una conexión PostgreSQL.');
   }
 
+  return parsed.toString();
+}
+
+/**
+ * Direct connection using the least-privileged application role.
+ * Neon poolers reject startup role overrides, while pg_session_jwt requires
+ * its JWK to be sent in PostgreSQL's startup packet.
+ */
+function getAuthenticatedDatabaseUrl(jwk: Ed25519Jwk): string {
+  const connectionString = process.env.DATABASE_URL_UNPOOLED?.trim();
+
+  if (!connectionString) {
+    throw new Error('DATABASE_URL_UNPOOLED no está configurada para sesiones RLS autenticadas.');
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(connectionString);
+  } catch {
+    throw new Error('DATABASE_URL_UNPOOLED no tiene un formato válido.');
+  }
+
+  if (!['postgres:', 'postgresql:'].includes(parsed.protocol)) {
+    throw new Error('DATABASE_URL_UNPOOLED debe ser una conexión PostgreSQL.');
+  }
+
   const existingOptions = parsed.searchParams.get('options')?.trim() ?? '';
-  const options = [existingOptions];
+  const publicJwk = {
+    kty: jwk.kty,
+    crv: jwk.crv,
+    x: jwk.x,
+    ...(jwk.kid ? { kid: jwk.kid } : {}),
+    ...(jwk.alg ? { alg: jwk.alg } : {}),
+    ...(jwk.use ? { use: jwk.use } : {}),
+  };
+  const jwkOption = "-c pg_session_jwt.jwk='" + JSON.stringify(publicJwk) + "'";
 
-  if (!existingOptions.includes('role=arcredix_app')) {
-    options.push('-c role=arcredix_app');
-  }
-
-  if (jwk) {
-    // pg_session_jwt requires this value in PostgreSQL's connection startup packet.
-    // The Pool/WebSocket driver sends startup options; neon() over HTTP does not.
-    options.push("-c pg_session_jwt.jwk='" + JSON.stringify({
-      kty: jwk.kty,
-      crv: jwk.crv,
-      x: jwk.x,
-      ...(jwk.kid ? { kid: jwk.kid } : {}),
-      ...(jwk.alg ? { alg: jwk.alg } : {}),
-      ...(jwk.use ? { use: jwk.use } : {}),
-    }) + "'");
-  }
-
-  parsed.searchParams.set('options', options.filter(Boolean).join(' '));
+  parsed.searchParams.set('options', [existingOptions, jwkOption].filter(Boolean).join(' '));
   return parsed.toString();
 }
 
@@ -211,7 +228,7 @@ export async function getAuthenticatedDatabase(): Promise<AuthenticatedSql> {
 
   const token = tokenResult.data.token;
   const jwk = await getJwkForToken(token);
-  const connectionString = getDatabaseUrl(jwk);
+  const connectionString = getAuthenticatedDatabaseUrl(jwk);
 
   const execute = async (queryText: string, values: unknown[] = []): Promise<AuthenticatedQueryResult> => {
     const pool = new Pool({
