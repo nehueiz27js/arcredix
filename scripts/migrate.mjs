@@ -40,6 +40,14 @@ const migrations = await Promise.all(migrationFiles.map(async (file) => {
   };
 }));
 
+const versions = new Set();
+for (const migration of migrations) {
+  if (versions.has(migration.version)) {
+    throw new Error('Hay más de una migración con la versión ' + migration.version + '. Cada versión debe ser única.');
+  }
+  versions.add(migration.version);
+}
+
 function ledgerInsert(migration) {
   return sql.query(
     'INSERT INTO public.schema_migrations (version, migration_name, checksum) VALUES ($1, $2, $3)',

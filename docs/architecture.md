@@ -2,66 +2,25 @@
 
 ## Principios
 
-1. **Multi-tenant por comercio:** toda consulta de negocio debe quedar limitada por el `merchant_id` derivado de la sesión autenticada. Nunca confiar en un `merchant_id` enviado libremente por el navegador.
+1. **Multi-tenant por comercio:** toda consulta de negocio queda limitada por el `merchant_id` derivado de la sesión autenticada. Nunca confiar en un `merchant_id` enviado libremente por el navegador.
 2. **Server-first:** acceso a Neon, secretos, autorización y proveedores de pago solo desde código de servidor.
 3. **Separación de responsabilidades:** rutas HTTP validan entrada y autorización; servicios implementan casos de uso; repositorios encapsulan SQL; adaptadores conectan proveedores externos.
-4. **Trazabilidad:** cambios administrativos, cambios de suscripción y eventos de pago deben dejar registros auditables.
-5. **Idempotencia:** webhooks, pagos y notificaciones deben poder procesarse más de una vez sin duplicar efectos.
-6. **Fail closed:** si no se puede validar sesión, permisos, firma o estado de proveedor, no se debe confirmar una operación.
-
-## Estructura objetivo
-
-```text
-src/
-  app/
-    (public)/                 Landing, login y recuperación
-    admin/                    Consola de superadministración
-    dashboard/                Espacio privado del comercio
-    api/
-      admin/                  Endpoints exclusivos de plataforma
-      merchant/               Endpoints limitados al tenant
-      webhooks/                Entradas autenticadas de proveedores
-  components/
-    admin/                    Componentes del superadmin
-    auth/                     Formularios y controles de sesión
-    dashboard/                Componentes del comercio
-    ui/                       Primitivos reutilizables
-  config/                     Configuración tipada y catálogos
-  domain/
-    merchants/                 Tipos y reglas de comercios
-    payments/                  Estados y reglas de pagos
-    subscriptions/             Ciclo de vida de suscripciones
-  hooks/                       Hooks de interfaz
-  lib/
-    auth/                      Sesión y autorización
-    db/                        Cliente Neon y repositorios
-    payments/                  Contratos y adaptadores
-    validations/               Esquemas Zod
-  services/
-    admin/                     Casos de uso del superadmin
-    merchants/                 Casos de uso del comercio
-    payments/                  Conciliación y validación
-    subscriptions/             Renovaciones y vencimientos
-    notifications/             Outbox y entrega
-  types/                       Tipos compartidos
-database/
-  migrations/
-scripts/
-docs/
-```
-
-La estructura se implementa de forma incremental: no crear módulos vacíos solo para aparentar cobertura. Cada carpeta debe contener código o documentación que explique su responsabilidad.
+4. **Trazabilidad:** cambios administrativos, cambios de suscripción y eventos de pago dejan registros auditables.
+5. **Idempotencia:** webhooks, pagos y notificaciones se procesan más de una vez sin duplicar efectos.
+6. **Fail closed:** si no se puede validar sesión, permisos, firma o estado de proveedor, no se confirma una operación.
 
 ## Límites de confianza
 
-- El cliente web no tiene acceso directo a la base de datos ni a secretos.
-- El cliente presenta únicamente un identificador aleatorio ARCREDIX de 256 bits. El backend busca su hash, valida comercio y membresía, y realiza el inicio de sesión interno en Neon Auth; correo y contraseña no se exponen en la interfaz.
-- `merchant_users` conserva el hash SHA-256 del identificador y una copia cifrada AES-256-GCM para que el superadmin pueda volver a consultarlo. La clave de cifrado se deriva de `NEON_AUTH_COOKIE_SECRET`; no se guarda en Neon.
-- Neon Auth emite la sesión HttpOnly utilizada por las rutas y por RLS. ARCREDIX resuelve el rol y la pertenencia al comercio en `merchant_users`.
-- El superadministrador conserva un acceso independiente con credenciales Neon Auth y se autoriza en servidor mediante allowlist privada. No se deriva de un campo enviado por el cliente.
-- El acceso a datos del comercio se limita a la membresía activa y al estado activo del comercio.
-- Las credenciales de proveedores deben residir en un almacén de secretos o mecanismo cifrado administrado. `credential_reference` es solo una referencia, no un token.
-- Los webhooks se consideran no confiables hasta validar su firma y consultar el pago original en el proveedor.
+- El navegador solo recibe un identificador ARCREDIX aleatorio de 256 bits (43 caracteres base64url). No recibe email ni contraseña.
+- El backend calcula SHA-256, valida membresía y estado del comercio, y realiza el inicio de sesión interno con Neon Auth.
+- `merchant_users` conserva el hash SHA-256 y una copia AES-256-GCM del identificador para recuperación administrativa. La clave se deriva de `NEON_AUTH_COOKIE_SECRET`; rotar esa clave requiere un procedimiento de re-cifrado.
+- Neon Auth emite la sesión HttpOnly. El servidor obtiene el JWT mediante `auth.token()`, verifica EdDSA contra el JWKS de la misma instancia, valida issuer y expiración y solo entonces crea el contexto SQL.
+- Cada consulta autenticada abre una transacción, ejecuta `SET LOCAL ROLE arcredix_app` y establece `request.jwt.claims` con los claims ya verificados. Nunca se configura `role` en el startup packet.
+- El rol `arcredix_app` es `NOLOGIN NOBYPASSRLS`; la conexión directa del servidor usa el usuario propietario únicamente para cambiar localmente al rol de aplicación. El secreto de conexión no se expone al navegador.
+- El superadministrador conserva acceso independiente por Neon Auth y allowlist validada en servidor.
+- Los webhooks usan el rol `arcredix_webhook`, sin sesión de usuario y con permisos limitados a funciones `SECURITY DEFINER` expresamente concedidas.
+- Las credenciales de proveedores se cifran AES-256-GCM con `ARCREDIX_CREDENTIALS_ENCRYPTION_KEY`. No se devuelven al navegador.
+- Los webhooks se consideran no confiables hasta validar firma y consultar el pago original en el proveedor.
 
 ## Roles de comercio
 
@@ -77,63 +36,52 @@ Los permisos explícitos por usuario pueden restringir la matriz del rol. Una de
 
 ## Dominios funcionales
 
-### Plataforma
-Comercios, altas manuales, usuarios, roles, planes, suscripciones, límites, auditoría y configuración.
-
-### Comercio
-Resumen, miembros, conexiones de pago, alias, QR oficiales, cajas, transacciones, conciliación e historial exportable.
-
-### Pagos
-Normalización de estados del proveedor, verificación de webhooks, consulta del recurso original, idempotencia, conciliación y auditoría.
-
-### Suscripciones
-Alta, períodos, renovación, gracia, vencimiento, suspensión, reactivación, extensiones y registro histórico.
-
-### Notificaciones
-Outbox persistente, consentimiento, plantillas, deduplicación, reintentos limitados y estados de entrega. No se envían mensajes sin proveedor configurado y autorización válida.
+- **Plataforma:** comercios, usuarios, roles, planes, suscripciones, límites, auditoría y configuración.
+- **Comercio:** resumen, miembros, conexiones de pago, alias, QR, cajas, transacciones, conciliación e historial.
+- **Pagos:** normalización de estados, verificación de webhooks, consulta del recurso original, idempotencia y conciliación.
+- **Suscripciones:** alta, períodos, renovación, gracia, vencimiento, suspensión, reactivación y registro histórico.
+- **Notificaciones:** outbox persistente, consentimiento, plantillas, deduplicación y reintentos limitados.
 
 ## Flujo de confirmación de pago
 
 1. El comercio genera o registra una operación esperada con importe y referencia.
 2. El proveedor procesa el pago.
-3. ARCREDIX recibe un webhook o consulta programada.
-4. Se valida la autenticidad del evento y se registra su identificador único.
+3. ARCREDIX recibe el webhook o consulta programada.
+4. Se valida la firma y se registra el evento único.
 5. El servidor consulta el recurso original al proveedor.
 6. Se comparan importe, moneda, cuenta, referencia y estado.
-7. La operación pasa a aprobada solo con evidencia verificable del proveedor.
+7. Solo una respuesta verificable del proveedor puede marcar el pago como aprobado.
 8. Se registra el evento y se actualizan las vistas del comercio.
 
-Leer un QR, cargar un comprobante o recibir una captura nunca debe marcar una operación como acreditada.
-
-## Procesos asíncronos
-
-Los vencimientos, recordatorios, reintentos de notificación y conciliaciones no pueden depender de que el usuario tenga el panel abierto. Se ejecutarán mediante tareas programadas seguras, con locks, idempotencia, límites de reintento y observabilidad.
-
-## Acceso a base de datos y RLS
-
-- El rol propietario `arcredix_owner` tiene `BYPASSRLS`; no debe usarse para consultas de usuario.
-- Las consultas de aplicación se ejecutan con `arcredix_app` (`NOLOGIN`, `NOBYPASSRLS`) mediante `options=-c role=arcredix_app`.
-- En rutas autenticadas, el servidor obtiene el JWT de Neon Auth y lo pasa al cliente `@neondatabase/serverless` mediante `authToken`.
-- `pg_session_jwt` expone el sujeto validado a funciones SQL `SECURITY DEFINER` con `search_path` fijo. Las políticas consultan membresía activa, rol del comercio o registro de superadmins.
-- Los planes y proveedores activos tienen lectura pública; operaciones de plataforma requieren la fila de superadmin activa.
-- `schema_migrations` no tiene RLS, pero no se concede al rol de aplicación.
-- Las políticas fueron probadas en una branch de Neon con dos tenants de prueba. Falta el smoke test local con el JWT real de Neon Auth antes de desplegar.
+Leer un QR, cargar un comprobante o recibir una captura nunca marca una operación como acreditada.
 
 ## Persistencia y migraciones
 
-Las migraciones SQL versionadas son la fuente reproducible del esquema. `public.schema_migrations` registra versión, nombre, Git blob SHA-1, fecha y rol ejecutor. `npm run migrate` requiere `DATABASE_URL_UNPOOLED` (conexión directa, sin `-pooler`) y aplica cada archivo junto con su registro en una transacción.
+Las migraciones SQL versionadas son la fuente reproducible del esquema. `public.schema_migrations` registra versión, nombre, Git blob SHA-1, fecha y rol ejecutor. `npm run migrate` requiere `DATABASE_URL_UNPOOLED` directa y aplica cada archivo junto con su registro en una transacción.
 
-Antes de una migración se debe probar en una rama temporal de Neon, revisar el resultado y luego aplicarla a la rama principal. No editar manualmente el esquema sin agregar su migración correspondiente.
+Cada migración tiene una versión numérica única. Las migraciones históricas no se reescriben ni se vuelven a ejecutar sobre una base existente. Los cambios se agregan con versiones nuevas, se prueban en una branch Neon y luego se aplican a la branch objetivo. No se ejecuta DDL destructivo.
 
+## Estructura de módulos
 
-## Endpoints administrativos disponibles
+```
+src/
+  app/                 páginas, layouts y route handlers delgados
+  components/          interfaz por dominio
+  config/              configuración tipada
+  domain/              reglas y tipos de negocio
+  hooks/               estado de interfaz reutilizable
+  lib/
+    auth/              sesión, tokens y autorización
+    db/                conexión y acceso a datos
+    payments/          cifrado y adaptadores de proveedores
+    validations/       esquemas Zod
+  services/             casos de uso por dominio
+  types/                contratos compartidos
+database/
+  migrations/           cambios versionados y reproducibles
+scripts/
+  tests/                pruebas automatizadas
+docs/
+```
 
-- `GET /api/admin/merchants`: cartera, filtros y estadísticas.
-- `PATCH /api/admin/merchants`: cambio de estado con motivo y auditoría.
-- `GET /api/admin/plans`: catálogo y cantidad de suscripciones actuales.
-- `POST /api/admin/plans`: alta de plan.
-- `PATCH /api/admin/plans`: edición de precio, límites, características y activación.
-- `GET /api/admin/subscriptions`: listado filtrable de suscripciones.
-- `PATCH /api/admin/subscriptions`: cambio de estado o extensión manual del período.
-
-Las pantallas `/admin/planes` y `/admin/suscripciones` consumen esos endpoints. La administración de planes y suscripciones es parcial: no sustituye los flujos automáticos de renovación, facturación o integración con proveedores.
+Los módulos se incorporan con funcionalidad real; no crear carpetas vacías para simular avance.

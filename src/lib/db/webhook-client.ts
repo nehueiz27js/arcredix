@@ -1,23 +1,61 @@
 import 'server-only';
 
-import { neon } from '@neondatabase/serverless';
+import { Pool } from '@neondatabase/serverless';
 
-type NeonClient = ReturnType<typeof neon>;
-let webhookClient: NeonClient | undefined;
+type WebhookQueryResult = {
+  rows: Record<string, unknown>[];
+  rowCount: number | null;
+};
+type WebhookSql = {
+  query: (text: string, values?: unknown[]) => Promise<WebhookQueryResult>;
+};
 
-/**
- * A dedicated DB connection for authenticated provider callbacks and cron jobs.
- * The URL must use the arcredix_owner login with startup role arcredix_webhook.
- * That role can execute only narrowly scoped SECURITY DEFINER functions.
- */
-export function getWebhookDatabase(): NeonClient {
-  if (webhookClient) return webhookClient;
-  const configured = process.env.ARCREDIX_WEBHOOK_DATABASE_URL?.trim();
-  if (!configured) throw new Error('Falta ARCREDIX_WEBHOOK_DATABASE_URL.');
-  const url = new URL(configured);
-  if (!['postgres:', 'postgresql:'].includes(url.protocol)) throw new Error('ARCREDIX_WEBHOOK_DATABASE_URL no es PostgreSQL.');
-  const options = (url.searchParams.get('options') || '').replace(/(?:^|\s)-c\s+role=[^\s]+/g, '').trim();
-  url.searchParams.set('options', [options, '-c role=arcredix_webhook'].filter(Boolean).join(' '));
-  webhookClient = neon(url.toString());
-  return webhookClient;
+let webhookPool: Pool | undefined;
+
+function getWebhookPool(): Pool {
+  if (!webhookPool) {
+    const configured = process.env.DATABASE_URL_UNPOOLED?.trim();
+    if (!configured) throw new Error('Falta DATABASE_URL_UNPOOLED para procesar webhooks.');
+    const url = new URL(configured);
+    if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.hostname.includes('-pooler')) {
+      throw new Error('DATABASE_URL_UNPOOLED debe ser una conexión PostgreSQL directa.');
+    }
+    // Role switching is transaction-local; startup role overrides are rejected by Neon.
+    url.searchParams.delete('options');
+    webhookPool = new Pool({
+      connectionString: url.toString(),
+      max: 3,
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 10000,
+      allowExitOnIdle: true,
+    });
+  }
+  return webhookPool;
+}
+
+/** Dedicated least-privilege context for provider callbacks and cron jobs. */
+export function getWebhookDatabase(): WebhookSql {
+  return {
+    async query(queryText: string, values: unknown[] = []) {
+      const client = await getWebhookPool().connect();
+      let transactionStarted = false;
+      try {
+        await client.query('BEGIN');
+        transactionStarted = true;
+        await client.query('SET LOCAL ROLE arcredix_webhook');
+        const result = await client.query(queryText, values);
+        await client.query('COMMIT');
+        transactionStarted = false;
+        return {
+          rows: result.rows as Record<string, unknown>[],
+          rowCount: result.rowCount,
+        };
+      } catch (error) {
+        if (transactionStarted) await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+  };
 }
