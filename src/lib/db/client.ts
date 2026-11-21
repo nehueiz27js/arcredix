@@ -106,12 +106,31 @@ async function getNeonAuthJwks(issuer: string): Promise<Ed25519Jwk[]> {
       const configuredBaseUrl = process.env.NEON_AUTH_BASE_URL?.trim();
       if (!configuredBaseUrl) throw new Error('NEON_AUTH_BASE_URL no está configurada.');
 
-      // An explicit JWKS URL can only be used for the primary configured issuer.
-      // For another trusted branch issuer, derive the JWKS endpoint from that issuer.
-      const primaryIssuer = configuredBaseUrl.replace(/\/$/, '');
-      const jwksUrl = issuer === primaryIssuer && process.env.NEON_AUTH_JWKS_URL?.trim()
+      // Neon Auth's JWT "iss" may be the host origin while its Auth API
+      // and JWKS are mounted under the database path (for example /arcredix/auth).
+      // Resolve the full Auth base URL from the trusted issuer configuration.
+      const configuredAuthUrls = [
+        configuredBaseUrl,
+        ...(process.env.NEON_AUTH_ALLOWED_ISSUERS ?? '')
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
+      ];
+      const authBaseUrl = configuredAuthUrls.find((value) => {
+        try {
+          return new URL(value).origin === issuer;
+        } catch {
+          return false;
+        }
+      });
+      if (!authBaseUrl) {
+        throw new Error('No se encontró una URL de Neon Auth para el emisor de la sesión.');
+      }
+      const normalizedAuthBaseUrl = authBaseUrl.replace(/\\/$/, '');
+      const jwksUrl = process.env.NEON_AUTH_JWKS_URL?.trim() &&
+        new URL(configuredBaseUrl).origin === issuer
         ? process.env.NEON_AUTH_JWKS_URL.trim()
-        : issuer + '/.well-known/jwks.json';
+        : normalizedAuthBaseUrl + '/.well-known/jwks.json';
       const response = await fetch(jwksUrl, {
         headers: { Accept: 'application/json' },
         cache: 'no-store',
