@@ -2,5 +2,5 @@ import { auth } from '@/lib/auth/server';
 
 export default auth.middleware({
   loginUrl: '/login',
-  publicRoutes: ['/', '/login', '/registro', '/api/health', '/api/public'],
+  publicRoutes: ['/', '/login', '/admin/login', '/registro', '/api/health', '/api/public'],
 });
