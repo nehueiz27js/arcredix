@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { AuthForm } from '@/components/auth/auth-form';
+import { ClientAccessForm } from '@/components/auth/client-access-form';
 import { Brand } from '@/components/landing/brand';
 
 export default function LoginPage() {
@@ -10,10 +10,10 @@ export default function LoginPage() {
         <Brand />
         <span className='section-kicker'>ACCESO A LA PLATAFORMA</span>
         <h1>Ingresá a tu comercio.</h1>
-        <p>Accedé al panel de control de cobros, cajas y movimientos de tu comercio.</p>
-        <AuthForm mode='login' />
+        <p>Usá el identificador de acceso que te entregó el administrador de tu comercio.</p>
+        <ClientAccessForm />
         <div className='mt-5 text-center'>
-          <Link className='text-sm text-emerald-300 hover:text-emerald-200' href='/recuperar-acceso'>¿Olvidaste o necesitás configurar tu contraseña?</Link>
+          <Link className='text-sm text-slate-400 hover:text-emerald-300' href='/admin/login'>Acceso de superadministrador</Link>
         </div>
         <Link className='auth-back-link' href='/'>Volver al sitio</Link>
       </section>
