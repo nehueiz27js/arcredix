@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { Building2, Clock3, ShieldCheck } from 'lucide-react';
 
 import { SignOutButton } from '@/components/auth/sign-out-button';
-import { auth } from '@/lib/auth/server';
+import { getCurrentMerchantMembership } from '@/lib/auth/authorization';
 import { getAuthenticatedDatabase } from '@/lib/db/client';
 
 export const dynamic = 'force-dynamic';
@@ -48,10 +48,8 @@ function statusLabel(status: string | null): string {
 }
 
 export default async function DashboardPage() {
-  const { data: session } = await auth.getSession();
-  const user = session?.user;
-
-  if (!user?.id) redirect('/login');
+  const membership = await getCurrentMerchantMembership();
+  if (!membership) redirect('/login');
 
   const sql = await getAuthenticatedDatabase();
   const result = await sql`
@@ -81,7 +79,7 @@ export default async function DashboardPage() {
       ORDER BY subscriptions.created_at DESC
       LIMIT 1
     ) s ON true
-    WHERE mu.auth_subject = ${user.id}
+    WHERE m.id = ${membership.merchantId}
       AND mu.status = 'active'
       AND m.status = 'active'
     LIMIT 1
@@ -104,7 +102,7 @@ export default async function DashboardPage() {
             Contactá al administrador de la plataforma para completar el alta.
           </p>
           <div className="mt-7">
-            <SignOutButton />
+            <SignOutButton mode='client' />
           </div>
         </section>
       </main>
@@ -124,7 +122,7 @@ export default async function DashboardPage() {
             <p className="mt-1 text-sm text-slate-400">Estado de tu cuenta y suscripción.</p>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-400">{user.email}</span>
+            <span className="text-sm text-slate-400">{membership.email}</span>
             <SignOutButton />
           </div>
         </header>
