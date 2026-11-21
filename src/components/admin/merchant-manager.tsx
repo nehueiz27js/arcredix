@@ -31,7 +31,7 @@ function dateLabel(value: string | null) {
 }
 function labelOf(merchant: Merchant) {
   const label = merchant.metadata?.admin_label as { name?: string | null; color?: LabelColor } | undefined;
-  return { name: label?.name ?? '', color: label?.color ?? 'emerald' };
+  return { name: label?.name ?? '', color: label?.color && label.color in colorClasses ? label.color : 'verde' };
 }
 function money(value: string | number | null) {
   return value === null ? 'Sin plan' : 'USD ' + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
