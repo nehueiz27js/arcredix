@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/server';
-import { CLIENT_SESSION_COOKIE, verifyClientSessionToken } from '@/lib/auth/client-session';
+import { CLIENT_SESSION_COOKIE, verifyClientSessionToken } from '@/lib/auth/session-token';
 
 const adminMiddleware = auth.middleware({
   loginUrl: '/admin/login',
