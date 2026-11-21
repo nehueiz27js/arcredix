@@ -110,7 +110,7 @@ La integración real de Mercado Pago, WhatsApp y correo productivo necesita cred
 | Gmail Push | Código preparado | Gmail Watch, Pub/Sub push con OIDC verificado por JWKS de Google y procesamiento de `history.list` |
 | Remitentes bancarios | Código preparado | Lista exacta por comercio; mensajes no permitidos se ignoran |
 | Avisos bancarios | Evidencia no verificada | Se guardan con estado `unknown`; nunca se aprueban por correo solamente; parser heurístico requiere pruebas por banco |
-| Renovación Gmail Watch | Código preparado | Endpoint `/api/cron/gmail-watch`; requiere programar una ejecución diaria y configurar `ARCREDIX_CRON_SECRET` |
+| Renovación Gmail Watch | Código preparado | Endpoint `/api/cron/gmail-watch` y workflow diario de GitHub Actions; requiere configurar los secretos `ARCREDIX_APP_URL` y `ARCREDIX_CRON_SECRET` |
 | Mercado Pago OAuth | Código preparado | Conexión individual de vendedores, credenciales cifradas y refresh de tokens |
 | Mercado Pago webhook | Código preparado | Firma HMAC, identificación por `user_id`, consulta de pago original y conciliación de estado/importe/cuenta |
 | Ualá Bis | No implementada | Catálogo informativo; no afirmar soporte para transferencias entrantes generales |

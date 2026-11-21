@@ -110,3 +110,8 @@ No reutilizar credenciales de la cuenta de un comercio para cobrar la suscripci�
 - Se valida `x-signature` y `x-request-id`; después se consulta el pago original con el token OAuth del comercio y se verifica `collector_id`, importe, moneda y estado.
 - Los tokens OAuth se cifran con AES-256-GCM y se renuevan cuando vencen. La firma debe configurarse en `MERCADO_PAGO_WEBHOOK_SECRET`.
 - La integración de Ualá Bis no se marca como disponible para transferencias entrantes generales: primero debe verificarse el producto y el endpoint de consulta que expone al comercio.
+
+
+### Renovación programada de Gmail Watch
+
+El workflow `.github/workflows/gmail-watch-renewal.yml` ejecuta `/api/cron/gmail-watch` diariamente a las 06:17 UTC y también permite ejecución manual. Configurar los secretos de repositorio `ARCREDIX_APP_URL` (origen HTTPS de la aplicación) y `ARCREDIX_CRON_SECRET` (mismo valor que en el entorno del servidor). No almacenar estos valores en archivos versionados.
