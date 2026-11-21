@@ -74,6 +74,18 @@ export async function GET(request: Request) {
   }
 }
 
+type NeonAdminApi = {
+  createUser(options: {
+    body: { email: string; password: string; name: string; role: string };
+    headers: Headers;
+  }): Promise<{ id?: string; user?: { id?: string }; data?: { id?: string; user?: { id?: string } }>;
+  removeUser(options: { body: { userId: string }; headers: Headers }): Promise<unknown>;
+};
+
+// Neon Auth's generated server type marks plugin namespaces as unknown;
+// the Admin endpoints themselves are exposed by Better Auth's server API.
+const neonAdminApi = (auth as unknown as { api: NeonAdminApi }).api;
+
 const labelColors = ['rojo','verde','azul','amarillo','violeta'] as const;
 const createSchema = z.object({
   firstName: z.string().trim().min(2).max(100),
@@ -114,11 +126,14 @@ export async function POST(request: Request) {
 
   const provisionAuthUser = async () => {
     try {
-      const result = await auth.admin.createUser({
-        email,
-        password: input.password,
-        name: ownerName,
-        role: 'user',
+      const result = await neonAdminApi.createUser({
+        body: {
+          email,
+          password: input.password,
+          name: ownerName,
+          role: 'user',
+        },
+        headers: request.headers,
       });
       const created = result as unknown as { id?: string; user?: { id?: string }; data?: { id?: string; user?: { id?: string } }; error?: { message?: string } };
       if (created.error) {
@@ -145,7 +160,10 @@ export async function POST(request: Request) {
 
   const rollbackAuthUser = async (authUserIdToDelete: string) => {
     try {
-      await auth.admin.removeUser({ userId: authUserIdToDelete });
+      await neonAdminApi.removeUser({
+        body: { userId: authUserIdToDelete },
+        headers: request.headers,
+      });
     } catch (rollbackError) {
       console.error('ARCREDIX auth user compensation failed:', rollbackError);
     }
