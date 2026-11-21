@@ -8,6 +8,17 @@ import { refreshMercadoPagoCredential, type MercadoPagoCredential } from '@/lib/
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+type MercadoPagoWebhookBody = {
+  data?: { id?: string | number };
+  type?: string; topic?: string; user_id?: string | number; collector_id?: string | number;
+};
+type MercadoPagoPayment = {
+  id?: string | number; collector_id?: string | number; live_mode?: boolean; status?: string;
+  date_created?: string; date_approved?: string; external_reference?: string | null;
+  transaction_amount?: number; currency_id?: string; payment_method_id?: string;
+  payer?: { email?: string }; status_detail?: string;
+};
+
 type ConnectionRow = {
   connection_id: string; ciphertext: string; iv: string; auth_tag: string;
   key_version: number; metadata: Record<string, unknown>;
@@ -16,8 +27,8 @@ type ConnectionRow = {
 export async function POST(request: Request) {
   const raw = await request.text();
   if (raw.length > 64_000) return NextResponse.json({ error: 'Payload demasiado grande.' }, { status: 413 });
-  let body: any;
-  try { body = JSON.parse(raw); } catch { return NextResponse.json({ error: 'JSON inválido.' }, { status: 400 }); }
+  let body: MercadoPagoWebhookBody;
+  try { body = JSON.parse(raw) as MercadoPagoWebhookBody; } catch { return NextResponse.json({ error: 'JSON inválido.' }, { status: 400 }); }
 
   const dataId = String(new URL(request.url).searchParams.get('data.id') || body?.data?.id || '');
   const topic = String(body?.type || body?.topic || '');
@@ -53,8 +64,8 @@ export async function POST(request: Request) {
       headers: { authorization: 'Bearer ' + credential.access_token, accept: 'application/json' },
       cache: 'no-store',
     });
-    const payment = await paymentResponse.json() as any;
-    if (!paymentResponse.ok) throw new Error('Mercado Pago no permitió consultar el pago original.');
+    const payment = await paymentResponse.json() as MercadoPagoPayment;
+    if (!paymentResponse.ok || !payment.id || !payment.collector_id || !Number.isFinite(payment.transaction_amount) || Number(payment.transaction_amount) <= 0) throw new Error('Mercado Pago no devolvió un pago válido.');
     if (String(payment.collector_id) !== providerUserId) {
       return NextResponse.json({ error: 'La cuenta receptora no coincide con la conexión.' }, { status: 409 });
     }

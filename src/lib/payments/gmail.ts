@@ -5,6 +5,15 @@ export interface GmailCredential { access_token: string; refresh_token: string; 
 export interface GmailMessageNotice {
   id: string; sender: string; subject: string; body: string; internalDate: string | null;
 }
+interface GmailHeader { name?: string; value?: string; }
+interface GmailPart { mimeType?: string; body?: { data?: string }; headers?: GmailHeader[]; parts?: GmailPart[]; }
+interface GmailHistoryResponse {
+  historyId?: string; nextPageToken?: string; error?: { message?: string };
+  history?: Array<{ messagesAdded?: Array<{ message?: { id?: string } }> }>;
+}
+interface GmailMessageResponse {
+  id?: string; internalDate?: string; payload?: GmailPart; error?: { message?: string };
+}
 
 function googleConfig() {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim();
@@ -67,7 +76,7 @@ function decodePart(data?: string): string {
   if (!data) return '';
   return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
 }
-function collectText(payload: any): string {
+function collectText(payload: GmailPart | undefined): string {
   if (!payload) return '';
   let result = payload.mimeType === 'text/plain' && payload.body?.data ? decodePart(payload.body.data) + '\n' : '';
   for (const part of payload.parts ?? []) result += collectText(part);
@@ -80,7 +89,7 @@ export async function getGmailHistoryMessages(accessToken: string, startHistoryI
   url.searchParams.set('historyTypes', 'messageAdded');
   url.searchParams.set('maxResults', '100');
   const response = await fetch(url, { headers: { authorization: 'Bearer ' + accessToken }, cache: 'no-store' });
-  const payload = await response.json() as any;
+  const payload = await response.json() as GmailHistoryResponse;
   if (!response.ok) throw new Error(payload.error?.message || 'No se pudo consultar historial Gmail.');
   const ids = new Set<string>();
   for (const item of payload.history ?? []) for (const added of item.messagesAdded ?? []) {
@@ -91,7 +100,7 @@ export async function getGmailHistoryMessages(accessToken: string, startHistoryI
   while (pageToken && pages < 10) {
     url.searchParams.set('pageToken', pageToken);
     const nextResponse = await fetch(url, { headers: { authorization: 'Bearer ' + accessToken }, cache: 'no-store' });
-    const next = await nextResponse.json() as any;
+    const next = await nextResponse.json() as GmailHistoryResponse;
     if (!nextResponse.ok) throw new Error(next.error?.message || 'No se pudo paginar el historial Gmail.');
     for (const item of next.history ?? []) for (const added of item.messagesAdded ?? []) {
       if (added.message?.id) ids.add(added.message.id);
@@ -106,10 +115,10 @@ export async function getGmailMessage(accessToken: string, messageId: string): P
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/' + encodeURIComponent(messageId) + '?format=full', {
     headers: { authorization: 'Bearer ' + accessToken }, cache: 'no-store',
   });
-  const payload = await response.json() as any;
+  const payload = await response.json() as GmailMessageResponse;
   if (!response.ok) throw new Error(payload.error?.message || 'No se pudo leer un mensaje Gmail.');
   const headers = payload.payload?.headers ?? [];
-  const getHeader = (name: string) => String(headers.find((h: any) => String(h.name).toLowerCase() === name)?.value ?? '');
+  const getHeader = (name: string) => String(headers.find((h) => String(h.name).toLowerCase() === name)?.value ?? '');
   return { id: String(payload.id), sender: getHeader('from'), subject: getHeader('subject'),
     body: collectText(payload.payload), internalDate: payload.internalDate ? new Date(Number(payload.internalDate)).toISOString() : null };
 }

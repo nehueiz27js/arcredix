@@ -56,6 +56,8 @@ export function ConnectionManager() {
       if (!response.ok) throw new Error(payload.error || 'No se pudieron cargar las conexiones.');
       const items = (payload.data || []) as Connection[];
       setConnections(items);
+      const result = new URLSearchParams(window.location.search).get('result');
+      if (result && resultMessages[result]) setNotice(resultMessages[result]);
       setSenders(Object.fromEntries(items.filter((x) => x.provider_code === 'bank_gmail')
         .map((x) => [x.id, Array.isArray(x.metadata.allowed_senders) ? (x.metadata.allowed_senders as string[]).join('\n') : ''])));
     } catch (caught) {
@@ -64,9 +66,7 @@ export function ConnectionManager() {
   }, []);
 
   useEffect(() => {
-    void load();
-    const result = new URLSearchParams(window.location.search).get('result');
-    if (result && resultMessages[result]) setNotice(resultMessages[result]);
+    queueMicrotask(() => { void load(); });
   }, [load]);
 
   async function saveSenders(event: FormEvent, connectionId: string) {

@@ -9,6 +9,8 @@ import { getGmailHistoryMessages, getGmailMessage, parseBankNoticeAmount,
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+type PubSubPushBody = { subscription?: string; message?: { data?: string } };
+
 type ConnectionRow = {
   connection_id: string; merchant_id: string; ciphertext: string; iv: string;
   auth_tag: string; key_version: number; metadata: Record<string, unknown>;
@@ -56,8 +58,8 @@ export async function POST(request: Request) {
   if (!await verifyPubSubToken(request)) return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
   const raw = await request.text();
   if (raw.length > 64_000) return NextResponse.json({ error: 'Payload demasiado grande.' }, { status: 413 });
-  let body: any;
-  try { body = JSON.parse(raw); } catch { return NextResponse.json({ error: 'JSON inválido.' }, { status: 400 }); }
+  let body: PubSubPushBody;
+  try { body = JSON.parse(raw) as PubSubPushBody; } catch { return NextResponse.json({ error: 'JSON inválido.' }, { status: 400 }); }
   const expectedSubscription = process.env.GOOGLE_PUBSUB_SUBSCRIPTION?.trim();
   if (expectedSubscription && body?.subscription !== expectedSubscription) {
     return NextResponse.json({ error: 'Suscripción Pub/Sub no válida.' }, { status: 403 });
