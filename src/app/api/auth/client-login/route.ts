@@ -27,7 +27,8 @@ export async function POST(request: Request) {
       WHERE ip = ${ip} AND scope = 'client' AND success = false
         AND created_at > now() - interval '15 minutes'
     `;
-    if (Number(attempts[0]?.failures ?? 0) >= 5) {
+    const attemptRows = Array.isArray(attempts) ? attempts : attempts.rows;
+    if (Number(attemptRows[0]?.failures ?? 0) >= 5) {
       return NextResponse.json(
         { error: 'Demasiados intentos. El acceso quedó bloqueado durante 15 minutos.' },
         { status: 429 },
@@ -49,7 +50,8 @@ export async function POST(request: Request) {
         AND m.status = 'active'
       LIMIT 1
     `;
-    const membership = result[0] as LoginRow | undefined;
+    const rows = Array.isArray(result) ? result : result.rows;
+    const membership = rows[0] as LoginRow | undefined;
 
     if (!membership) {
       await sql`INSERT INTO public.login_attempts (ip, scope, success) VALUES (${ip}, 'client', false)`;
