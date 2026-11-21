@@ -20,7 +20,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const { data: session } = await auth.getSession();
   const user = session?.user;
 
-  if (!user?.id) redirect('/login');
+  if (!user?.id) redirect('/admin/login');
   if (!isSuperAdminEmail(user.email)) redirect('/dashboard');
 
   return (
