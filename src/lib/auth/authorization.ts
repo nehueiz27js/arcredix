@@ -1,6 +1,5 @@
 import 'server-only';
 
-import { auth } from '@/lib/auth/server';
 import { isSuperAdminEmail } from '@/lib/auth/superadmin';
 import { getAuthenticatedDatabase } from '@/lib/db/client';
 import { readClientSession } from '@/lib/auth/client-session';
@@ -64,6 +63,7 @@ const rolePermissions: Record<MerchantRole, readonly MerchantPermission[]> = {
 };
 
 export async function getAuthenticatedUser() {
+  const { auth } = await import('@/lib/auth/server');
   const { data: session } = await auth.getSession();
   return session?.user ?? null;
 }
