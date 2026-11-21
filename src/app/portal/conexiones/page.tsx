@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ConnectionsPage() {
   const currentMembership = await getCurrentMerchantMembership();
-  if (!currentMembership) redirect('/login');
+  if (!currentMembership) redirect('/portal/login');
   const membership = await authorizeMerchant('settings.manage');
   if (!membership) redirect('/portal');
 
