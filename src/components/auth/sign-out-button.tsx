@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 
-import { authClient } from '@/lib/auth/client';
 
 type SignOutButtonProps = { mode?: 'admin' | 'client' };
 
@@ -23,6 +22,7 @@ export function SignOutButton({ mode = 'admin' }: SignOutButtonProps) {
         });
         if (!response.ok) throw new Error('No se pudo cerrar la sesión.');
       } else {
+        const { authClient } = await import('@/lib/auth/client');
         await authClient.signOut();
       }
       router.replace(mode === 'admin' ? '/admin/login' : '/login');
