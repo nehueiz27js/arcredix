@@ -149,23 +149,14 @@ async function getJwkForToken(token: string): Promise<Ed25519Jwk> {
  * arcredix_app role and forwards the authenticated JWT with its matching
  * public JWK in PostgreSQL's connection startup options.
  */
-export function getDatabase(authToken?: string, jwk?: Ed25519Jwk): NeonClient {
-  if (authToken && !jwk) {
-    throw new Error('La conexión autenticada requiere la clave pública JWK de Neon Auth.');
-  }
-
-  const connectionString = getDatabaseUrl(jwk);
-
-  if (authToken) {
-    return neon(connectionString, { authToken });
-  }
-
+export function getDatabase(): NeonClient {
   if (!databaseClient) {
-    databaseClient = neon(connectionString);
+    databaseClient = neon(getDatabaseUrl());
   }
 
   return databaseClient;
 }
+
 
 /**
  * Privileged server-only client for the single credential-resolution query used
@@ -208,5 +199,21 @@ export async function getAuthenticatedDatabase(): Promise<NeonClient> {
 
   const token = tokenResult.data.token;
   const jwk = await getJwkForToken(token);
-  return getDatabase(token, jwk);
+  // The neon-serverless authToken option authenticates transport requests; it
+  // does not initialize pg_session_jwt. The extension requires both calls
+  // below to run on the same connection and transaction as the protected SQL.
+  const raw = neon(getDatabaseUrl(jwk));
+  return new Proxy(raw, {
+    apply(target, thisArg, args: Parameters<NeonClient>) {
+      const initializeJwk = target`SELECT auth.init()`;
+      const initializeJwt = target`SELECT auth.jwt_session_init(${token})`;
+      const protectedQuery = Reflect.apply(target, thisArg, args);
+
+      return target.transaction([
+        initializeJwk,
+        initializeJwt,
+        protectedQuery,
+      ]).then((results) => results[2]);
+    },
+  });
 }
