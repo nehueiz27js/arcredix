@@ -78,7 +78,7 @@ type NeonAdminApi = {
   createUser(options: {
     body: { email: string; password: string; name: string; role: string };
     headers: Headers;
-  }): Promise<{ id?: string; user?: { id?: string }; data?: { id?: string; user?: { id?: string } }>;
+  }): Promise<{ id?: string; user?: { id?: string }; data?: { id?: string; user?: { id?: string } } }>;
   removeUser(options: { body: { userId: string }; headers: Headers }): Promise<unknown>;
 };
 
