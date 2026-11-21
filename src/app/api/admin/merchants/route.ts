@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { randomBytes } from 'node:crypto';
 import { auth } from '@/lib/auth/server';
 import { isSuperAdminEmail } from '@/lib/auth/superadmin';
 import { getAuthenticatedDatabase } from '@/lib/db/client';
@@ -93,7 +94,6 @@ const createSchema = z.object({
   tradeName: z.string().trim().min(2).max(200),
   holderRole: z.enum(['dueño','encargado','gerente','segundo_dueño']),
   email: z.string().trim().email().max(256),
-  password: z.string().min(8).max(128),
   dni: z.string().trim().min(6).max(20),
   planCode: z.enum(['starter','growth','business']),
   billingStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -107,12 +107,13 @@ export async function POST(request: Request) {
 
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Revisá los datos del cliente, la contraseña y el plan.' }, { status: 400 });
+    return NextResponse.json({ error: 'Revisá los datos del cliente y el plan.' }, { status: 400 });
   }
 
   const input = parsed.data;
   const email = input.email.toLowerCase();
   const ownerName = input.firstName + ' ' + input.lastName;
+  const generatedPasskey = randomBytes(32).toString('base64url');
   const mappedRole = input.holderRole === 'dueño' ? 'owner' : input.holderRole === 'encargado' ? 'manager' : 'admin';
   const labelNames: Record<typeof input.labelColor, string> = {
     rojo: 'Rojo',
@@ -129,7 +130,7 @@ export async function POST(request: Request) {
       const result = await neonAdminApi.createUser({
         body: {
           email,
-          password: input.password,
+          password: generatedPasskey,
           name: ownerName,
           role: 'user',
         },
@@ -226,7 +227,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       data: rows[0],
-      access: { status: 'created', authUserId, email },
+      access: { status: 'created', authUserId, email, passkey: generatedPasskey },
     }, { status: 201 });
   } catch (error) {
     if (authUserId) await rollbackAuthUser(authUserId);
