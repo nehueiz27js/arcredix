@@ -7,6 +7,8 @@
 - Validar con Zod los cuerpos, parámetros y filtros recibidos.
 - Aplicar autorización en cada endpoint del servidor; ocultar botones no es autorización.
 - Derivar el comercio desde la sesión y la membresía activa, nunca desde un identificador arbitrario del cliente.
+- Los identificadores de acceso de clientes deben ser aleatorios (256 bits), almacenarse como hash SHA-256 y cifrarse adicionalmente solo para su consulta administrativa. Nunca registrar identificadores completos en logs.
+- El endpoint de login por identificador debe resolver la credencial mediante hash exacto, comprobar membresía y comercio activos y emitir una sesión Neon Auth vinculada al `auth_subject` esperado.
 - Usar consultas parametrizadas.
 - Limitar tamaño de payload, paginar listados y limitar exportaciones.
 - Registrar actor, entidad, acción, fecha y motivo en operaciones administrativas sensibles.
