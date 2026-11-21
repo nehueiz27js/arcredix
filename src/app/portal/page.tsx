@@ -49,7 +49,7 @@ function statusLabel(status: string | null): string {
 
 export default async function DashboardPage() {
   const membership = await getCurrentMerchantMembership();
-  if (!membership) redirect('/login');
+  if (!membership) redirect('/portal/login');
 
   const sql = await getAuthenticatedDatabase();
   const result = await sql`
