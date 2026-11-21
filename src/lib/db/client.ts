@@ -228,7 +228,7 @@ export async function getAuthenticatedDatabase(): Promise<AuthenticatedSql> {
   }
 
   const claims = await verifyNeonAuthToken(tokenResult.data.token);
-  const serializedClaims = JSON.stringify(claims);
+  const authenticatedSubject = claims.sub;
   const pool = getAuthenticatedPool();
 
   const execute = async (queryText: string, values: unknown[] = []): Promise<AuthenticatedQueryResult> => {
@@ -238,7 +238,7 @@ export async function getAuthenticatedDatabase(): Promise<AuthenticatedSql> {
       await client.query('BEGIN');
       transactionStarted = true;
       await client.query('SET LOCAL ROLE arcredix_app');
-      await client.query("SELECT set_config('request.jwt.claims', $1, true)", [serializedClaims]);
+      await client.query("SELECT set_config('arc.auth_subject', $1, true)", [authenticatedSubject]);
       const result = await client.query(queryText, values);
       await client.query('COMMIT');
       transactionStarted = false;

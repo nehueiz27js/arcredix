@@ -15,7 +15,7 @@
 - El backend calcula SHA-256, valida membresía y estado del comercio, y realiza el inicio de sesión interno con Neon Auth.
 - `merchant_users` conserva el hash SHA-256 y una copia AES-256-GCM del identificador para recuperación administrativa. La clave se deriva de `NEON_AUTH_COOKIE_SECRET`; rotar esa clave requiere un procedimiento de re-cifrado.
 - Neon Auth emite la sesión HttpOnly. El servidor obtiene el JWT mediante `auth.token()`, verifica EdDSA contra el JWKS de la misma instancia, valida issuer y expiración y solo entonces crea el contexto SQL.
-- Cada consulta autenticada abre una transacción, ejecuta `SET LOCAL ROLE arcredix_app` y establece `request.jwt.claims` con los claims ya verificados. Nunca se configura `role` en el startup packet.
+- Cada consulta autenticada abre una transacción, ejecuta `SET LOCAL ROLE arcredix_app` y establece `arc.auth_subject` con el `sub` de un JWT EdDSA ya verificado por el servidor. La función `public.current_auth_subject()` lee ese contexto transaccional; nunca se configura `role` ni JWK en el startup packet.
 - El rol `arcredix_app` es `NOLOGIN NOBYPASSRLS`; la conexión directa del servidor usa el usuario propietario únicamente para cambiar localmente al rol de aplicación. El secreto de conexión no se expone al navegador.
 - El superadministrador conserva acceso independiente por Neon Auth y allowlist validada en servidor.
 - Los webhooks usan el rol `arcredix_webhook`, sin sesión de usuario y con permisos limitados a funciones `SECURITY DEFINER` expresamente concedidas.

@@ -8,6 +8,7 @@
 - `0006_client_access_identifiers.sql`: identificadores de acceso ARCREDIX, hash y almacenamiento cifrado.
 - `0007_financial_integrations.sql`: proveedores de pago, secretos OAuth cifrados, Gmail push y funciones acotadas para procesar integraciones.
 - `0008_integration_maintenance.sql`: rol restringido de webhooks y funciones de mantenimiento de integraciones.
+- `0009_verified_auth_context.sql`: contexto de sujeto verificado por el servidor para RLS, sin depender de la inicialización JWK de `pg_session_jwt`.
 
 ## Reglas del runner
 
