@@ -33,7 +33,7 @@ async function verifyPubSubToken(request: Request): Promise<boolean> {
     const verifier = createVerify('RSA-SHA256');
     verifier.update(parts[0] + '.' + parts[1]);
     verifier.end();
-    if (!verifier.verify(createPublicKey({ key: jwk as JsonWebKey, format: 'jwk' }), Buffer.from(parts[2], 'base64url'))) return false;
+    if (!verifier.verify(createPublicKey({ key: jwk as unknown as import('node:crypto').JsonWebKey, format: 'jwk' }), Buffer.from(parts[2], 'base64url'))) return false;
     const now = Math.floor(Date.now() / 1000);
     return Number(claims.exp || 0) > now && Number(claims.iat || 0) <= now + 60 &&
       claims.aud === audience && ['accounts.google.com', 'https://accounts.google.com'].includes(String(claims.iss || '')) &&

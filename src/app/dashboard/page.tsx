@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { Building2, Clock3, ShieldCheck } from 'lucide-react';
 
 import { SignOutButton } from '@/components/auth/sign-out-button';
