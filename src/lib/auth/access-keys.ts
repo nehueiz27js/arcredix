@@ -36,7 +36,8 @@ export function hashLegacyAccessKey(identifier: string): string {
 }
 
 export function hashAccessKey(identifier: string): string {
-  return createHmac('sha256', pepper())
+  const derivedKey = createHmac('sha256', pepper()).update('arc-redix:access-code:v1').digest();
+  return createHmac('sha256', derivedKey)
     .update(normalizeAccessIdentifier(identifier), 'utf8')
     .digest('hex');
 }
