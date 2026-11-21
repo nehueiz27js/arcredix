@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { neon, Pool } from '@neondatabase/serverless';
-import { auth } from '@/lib/auth/server';
 import { readClientSession } from '@/lib/auth/client-session';
 
 type NeonClient = ReturnType<typeof neon>;
@@ -104,6 +103,7 @@ export async function getAuthenticatedDatabase(): Promise<AuthenticatedSql> {
   let authenticatedSubject = clientSession?.sub;
 
   if (!authenticatedSubject) {
+    const { auth } = await import('@/lib/auth/server');
     const { data: session } = await auth.getSession();
     authenticatedSubject = session?.user?.id ?? undefined;
   }
