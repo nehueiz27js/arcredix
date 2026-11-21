@@ -28,9 +28,15 @@ export async function GET() {
         },
       },
     );
-  } catch {
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error);
+    console.error("ARCREDIX public plans GET failed:", details);
+
     return NextResponse.json(
-      { error: "No se pudo consultar el catálogo de planes." },
+      {
+        error: "No se pudo consultar el catálogo de planes.",
+        ...(process.env.NODE_ENV === "development" ? { details } : {}),
+      },
       { status: 503 },
     );
   }
