@@ -26,7 +26,7 @@ export function ClientAccessForm() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'No se pudo validar el identificador.');
 
-      router.replace('/dashboard');
+      router.replace('/portal');
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'No se pudo conectar con el servicio de acceso.');
