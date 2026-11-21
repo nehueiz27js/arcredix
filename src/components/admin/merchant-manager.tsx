@@ -88,11 +88,11 @@ export function MerchantManager() {
     event.preventDefault(); setCreating(true); setError(''); setNotice('');
     try {
       const response = await fetch('/api/admin/merchants', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, password: undefined }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? 'No se pudo dar de alta.');
-      setNotice('Alta comercial creada. La cuenta de acceso Neon Auth del titular queda pendiente de provisionamiento.');
+      setNotice('Cliente y cuenta de acceso creados correctamente en Neon Auth.');
       setShowCreate(false);
       setForm({ ...initialForm, planCode: plans[0]?.code ?? '' });
       await load();
@@ -169,7 +169,7 @@ export function MerchantManager() {
             <label className="text-xs text-slate-400">Nombre del comercio<input required value={form.tradeName} onChange={(event) => setForm((current) => ({ ...current, tradeName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
             <label className="text-xs text-slate-400">Titular / cargo<select value={form.holderRole} onChange={(event) => setForm((current) => ({ ...current, holderRole: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="dueño">Dueño</option><option value="encargado">Encargado</option><option value="gerente">Gerente</option><option value="segundo_dueño">2° dueño</option></select></label>
             <label className="text-xs text-slate-400">Gmail de acceso<input required type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="nombre@gmail.com" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
-            <label className="text-xs text-slate-400">Contraseña inicial<input required type="password" minLength={8} autoComplete="new-password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /><span className="mt-1 block text-[11px] text-amber-200">El acceso Neon Auth todavía requiere integración segura; la contraseña no se guarda ni se envía.</span></label>
+            <label className="text-xs text-slate-400">Contraseña inicial<input required type="password" minLength={8} autoComplete="new-password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /><span className="mt-1 block text-[11px] text-amber-200">La cuenta se crea de forma segura mediante Neon Auth.</span></label>
             <label className="text-xs text-slate-400">DNI<input required inputMode="numeric" value={form.dni} onChange={(event) => setForm((current) => ({ ...current, dni: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
             <label className="text-xs text-slate-400">Plan<select required value={form.planCode} onChange={(event) => setForm((current) => ({ ...current, planCode: event.target.value }))} disabled={plans.length === 0} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="">Seleccionar plan</option>{plans.map((plan) => <option key={plan.code} value={plan.code}>{plan.name} · {money(plan.monthly_price_usd)}/mes</option>)}</select></label>
             <label className="text-xs text-slate-400">Inicio de facturación<input required type="date" value={form.billingStartDate} onChange={(event) => setForm((current) => ({ ...current, billingStartDate: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
