@@ -55,7 +55,7 @@ export function ClientAccessForm() {
             spellCheck={false}
             required
             minLength={16}
-            maxLength={19}
+            maxLength={43}
             value={identifier}
             onChange={(event) => setIdentifier(event.target.value.replace(/\s/g, ''))}
             placeholder='Pegá tu identificador de ARCREDIX'
@@ -73,7 +73,7 @@ export function ClientAccessForm() {
 
       <button
         type='submit'
-        disabled={busy || identifier.replace(/[^A-Z0-9]/g, '').length !== 16}
+        disabled={busy || !(identifier.replace(/[^A-Z0-9]/g, '').length === 16 || /^[A-Za-z0-9_-]{43}$/.test(identifier))}
         className='flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-5 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60'
       >
         {busy ? <LoaderCircle size={17} className='animate-spin' /> : <ArrowRight size={17} />}
