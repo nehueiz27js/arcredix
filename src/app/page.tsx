@@ -89,7 +89,7 @@ export default function Home() {
             <a href="#preguntas">Preguntas frecuentes</a>
           </nav>
           <div className="nav-actions">
-            <Link className="nav-login" href="/login">Ingresar</Link>
+            <Link className="nav-login" href="/portal/login">Ingresar</Link>
             <a className="button button-small" href="#planes">Ver planes <ArrowRight size={15} /></a>
           </div>
         </div>
@@ -239,7 +239,7 @@ export default function Home() {
           <div className="footer-brand"><Brand /><p>Validá tus cobros. Evitá estafas.</p><small>Una herramienta de control operativo para comercios.</small></div>
           <div className="footer-column"><strong>Plataforma</strong><a href="#como-funciona">Cómo funciona</a><a href="#funciones">Funciones</a><a href="#qr-cajas">QR y cajas</a><a href="#planes">Planes</a></div>
           <div className="footer-column"><strong>Ayuda</strong><a href="#preguntas">Preguntas frecuentes</a><a href="mailto:ventas@arcredix.com">Contacto comercial</a></div>
-          <div className="footer-column"><strong>Acceso</strong><Link href="/login">Ingresar</Link><Link href="/registro">Crear cuenta</Link></div>
+          <div className="footer-column"><strong>Acceso</strong><Link href="/portal/login">Ingresar</Link><Link href="/registro">Crear cuenta</Link></div>
         </div>
         <div className="container footer-bottom"><span>© {new Date().getFullYear()} ARCREDIX. Todos los derechos reservados.</span><span>No procesa pagos ni custodia fondos. Las confirmaciones dependen de fuentes financieras integradas.</span></div>
       </footer>
