@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { ClientAccessForm } from '@/components/auth/client-access-form';
 import { Brand } from '@/components/landing/brand';
 
