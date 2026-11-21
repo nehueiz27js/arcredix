@@ -15,7 +15,7 @@ type Merchant = {
   current_period_start: string | null; current_period_end: string | null;
   connection_limit: number | null; plan_features: Record<string, unknown> | null;
   users_count: number; connections_count: number; registers_count: number; qr_count: number;
-  access_identifier: string | null;
+  access_key_hint: string | null;
 };
 type Stats = { merchants_total: number; merchants_pending: number; merchants_active: number; merchants_suspended: number; merchants_cancelled: number };
 const emptyStats: Stats = { merchants_total: 0, merchants_pending: 0, merchants_active: 0, merchants_suspended: 0, merchants_cancelled: 0 };
@@ -95,13 +95,31 @@ export function MerchantManager() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? 'No se pudo dar de alta.');
       setGeneratedAccess({ identifier: payload.access.identifier });
-      setNotice('Cliente creado y validado. El identificador quedó guardado de forma cifrada en Neon.');
+      setNotice('Cliente creado. El identificador se muestra una sola vez; guardalo antes de cerrar esta ventana.');
       setShowCreate(false);
       setForm({ ...initialForm, planCode: plans[0]?.code ?? '' });
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Error inesperado.');
     } finally { setCreating(false); }
+  }
+
+  async function regenerateAccess(merchant: Merchant) {
+    if (!window.confirm('El identificador actual dejará de funcionar inmediatamente. ¿Regenerarlo?')) return;
+    setPendingId(merchant.id); setError(''); setNotice('');
+    try {
+      const response = await fetch('/api/admin/merchants', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ merchantId: merchant.id, regenerateAccess: true }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? 'No se pudo regenerar el identificador.');
+      setGeneratedAccess({ identifier: payload.access.identifier });
+      setNotice('Identificador anterior invalidado. Copiá y entregá el nuevo código.');
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Error inesperado.');
+    } finally { setPendingId(null); }
   }
 
   async function updateStatus(merchant: Merchant, status: MerchantStatus) {
@@ -214,10 +232,10 @@ export function MerchantManager() {
               </div>
               <div className="mt-4 rounded-lg border border-white/5 bg-[#0b1721] p-3">
                 <p className="text-xs font-medium text-slate-300">Identificador de acceso</p>
-                {merchant.access_identifier ? <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <code className="min-w-0 flex-1 break-all text-xs text-emerald-200">{merchant.access_identifier}</code>
-                  <button type="button" onClick={() => void navigator.clipboard.writeText(merchant.access_identifier || '')} className="inline-flex h-8 items-center gap-2 rounded-md border border-white/15 px-2 text-xs text-white hover:border-emerald-300/50"><Copy size={13} /> Copiar</button>
-                </div> : <p className="mt-1 text-xs text-amber-200">Sin identificador asignado (registro histórico).</p>}
+                {merchant.access_key_hint ? <div className="mt-2">
+                  <code className="text-xs text-emerald-200">••••-••••-••••-{merchant.access_key_hint}</code>
+                  <p className="mt-1 text-xs text-slate-500">Por seguridad, el código completo no se conserva. Si se perdió, regeneralo.</p>
+                </div> : <p className="mt-1 text-xs text-amber-200">Sin identificador asignado. Regenerá uno para habilitar el acceso.</p>}
               </div>
               <div className="mt-4 grid gap-2 text-xs text-slate-400 sm:grid-cols-2 xl:grid-cols-4">
                 <p>Alta: <span className="text-slate-200">{dateLabel(merchant.created_at)}</span></p><p>Vencimiento: <span className="text-slate-200">{dateLabel(merchant.current_period_end)}</span></p><p>Usuarios: <span className="text-slate-200">{merchant.users_count}</span> · Conexiones: <span className="text-slate-200">{merchant.connections_count}</span></p><p>Cajas: <span className="text-slate-200">{merchant.registers_count}</span> · QRs: <span className="text-slate-200">{merchant.qr_count}</span></p>
@@ -229,6 +247,9 @@ export function MerchantManager() {
                   <select value={labelColors[merchant.id] ?? label.color} onChange={(event) => setLabelColors((current) => ({ ...current, [merchant.id]: event.target.value as LabelColor }))} className="h-9 rounded-md border border-white/10 bg-[#07111a] px-2 text-sm text-white">{(['rojo','verde','azul','amarillo','violeta'] as LabelColor[]).map((color) => <option key={color} value={color}>{color[0].toUpperCase() + color.slice(1)}</option>)}</select>
                   <button type="button" disabled={pendingId === merchant.id} onClick={() => void saveLabel(merchant)} className="h-9 rounded-md border border-white/15 px-3 text-sm hover:border-emerald-300/40 disabled:opacity-50">Guardar etiqueta</button>
                 </div>
+              </div>
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <button type="button" disabled={pendingId === merchant.id} onClick={() => void regenerateAccess(merchant)} className="h-9 rounded-md border border-emerald-300/25 px-3 text-sm text-emerald-200 hover:bg-emerald-300/5 disabled:opacity-50">Regenerar identificador</button>
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                 <input value={reasons[merchant.id] ?? ''} onChange={(event) => setReasons((current) => ({ ...current, [merchant.id]: event.target.value }))} placeholder="Motivo obligatorio para activar / desactivar" className="h-9 min-w-0 rounded-md border border-white/10 bg-[#0b1721] px-3 text-sm outline-none placeholder:text-slate-600" />
