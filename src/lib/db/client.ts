@@ -160,13 +160,20 @@ async function verifyNeonAuthToken(token: string): Promise<JwtClaims> {
 
   const baseUrl = process.env.NEON_AUTH_BASE_URL?.trim().replace(/\/$/, '');
   const issuer = claims.iss.replace(/\/$/, '');
+  const toIssuerOrigin = (value: string) => {
+    try {
+      return new URL(value).origin;
+    } catch {
+      return '';
+    }
+  };
   const allowedIssuers = new Set([
-    baseUrl,
+    baseUrl ? toIssuerOrigin(baseUrl) : '',
     ...(process.env.NEON_AUTH_ALLOWED_ISSUERS ?? '')
       .split(',')
-      .map((value) => value.trim().replace(/\/$/, ''))
+      .map((value) => toIssuerOrigin(value.trim()))
       .filter(Boolean),
-  ]);
+  ].filter(Boolean));
 
   if (!baseUrl || !allowedIssuers.has(issuer)) {
     // Only log issuer URLs (never the JWT, subject, cookies, or signature).
