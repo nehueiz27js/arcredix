@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       sql`
         SELECT m.id, m.legal_name, m.trade_name, m.owner_name, m.email, m.phone,
           m.whatsapp_phone, m.tax_id, m.status, m.created_at, m.metadata,
-          access.access_key_hint,
+          access.access_key_hint, access.access_key_expires_at, access.last_login_at,
           latest.plan_name, latest.plan_code, latest.subscription_status,
           latest.billing_interval, latest.price_usd, latest.current_period_start,
           latest.current_period_end, latest.connection_limit, latest.plan_features,
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
           WHERE s.merchant_id=m.id ORDER BY s.created_at DESC LIMIT 1
         ) latest ON true
         LEFT JOIN LATERAL (
-          SELECT access_key_hint
+          SELECT access_key_hint, access_key_expires_at, last_login_at
           FROM public.merchant_users
           WHERE merchant_id=m.id AND status='active'
           ORDER BY created_at ASC LIMIT 1
@@ -93,6 +93,7 @@ const createSchema = z.object({
   labelName: z.string().trim().min(2).max(40),
   labelColor: z.enum(labelColors).default('verde'),
   tradeName: z.string().trim().min(2).max(200),
+  days: z.coerce.number().int().min(0).max(3650).default(0),
 });
 
 export async function POST(request: Request) {
@@ -154,10 +155,12 @@ export async function POST(request: Request) {
       ), membership AS (
         INSERT INTO public.merchant_users (
           merchant_id, auth_subject, email, full_name, role, status,
-          access_key_hash, access_key_hint, access_key_created_at
+          access_key_hash, access_key_hint, access_key_expires_at, access_key_created_at
         )
         SELECT id, ${authSubject}, ${email}, ${ownerName}, 'owner', 'active',
-          ${accessKey.hash}, ${accessKey.hint}, now()
+          ${accessKey.hash}, ${accessKey.hint},
+          CASE WHEN ${input.days} > 0 THEN now() + (${input.days} * interval '1 day') ELSE NULL END,
+          now()
         FROM merchant RETURNING merchant_id
       ), audit AS (
         INSERT INTO public.audit_logs (
