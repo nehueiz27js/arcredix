@@ -214,7 +214,7 @@ export async function POST(request: Request) {
     if (authUserId) await rollbackAuthUser(authUserId);
     console.error('ARCREDIX admin merchants POST failed:', error);
     const message = error instanceof Error ? error.message : 'No se pudo crear el cliente.';
-    const status = message.includes('Gmail ya') ? 409 : message.includes('Neon Auth rechazó') ? 403 : 500;
+    const status = message.includes('Gmail ya') ? 409 : /Neon Auth no autorizó|Neon Auth rechazó/.test(message) ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
