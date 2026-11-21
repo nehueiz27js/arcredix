@@ -110,65 +110,42 @@ export async function POST(request: Request) {
     violeta: 'Violeta',
   };
 
-  const authBaseUrl = process.env.NEON_AUTH_BASE_URL?.replace(/\/$/, '');
-  const sessionCookie = request.headers.get('cookie');
-  if (!authBaseUrl || !sessionCookie) {
-    return NextResponse.json({ error: 'No se pudo validar la sesión administrativa de Neon Auth.' }, { status: 503 });
-  }
-
   let authUserId: string | null = null;
+
   const provisionAuthUser = async () => {
-    const response = await fetch(authBaseUrl + '/admin/create-user', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        cookie: sessionCookie,
-        origin: new URL(request.url).origin,
-      },
-      body: JSON.stringify({
+    try {
+      const result = await auth.admin.createUser({
         email,
         password: input.password,
         name: ownerName,
         role: 'user',
-      }),
-      cache: 'no-store',
-    });
-
-    const payload = await response.json().catch(() => null) as {
-      id?: string;
-      user?: { id?: string };
-      message?: string;
-      error?: string;
-      code?: string;
-    } | null;
-
-    if (!response.ok) {
-      if (response.status === 409 || payload?.code === 'USER_ALREADY_EXISTS') {
+      });
+      const created = result as unknown as { id?: string; user?: { id?: string }; data?: { id?: string; user?: { id?: string } }; error?: { message?: string } };
+      if (created.error) {
+        const message = created.error.message || 'Neon Auth no pudo crear la cuenta del cliente.';
+        if (/already|exist|duplicate/i.test(message)) {
+          throw new Error('Ese Gmail ya tiene una cuenta registrada en ARCREDIX.');
+        }
+        throw new Error(message);
+      }
+      const id = created.data?.id ?? created.data?.user?.id ?? created.id ?? created.user?.id;
+      if (!id) throw new Error('Neon Auth respondió sin el identificador de la cuenta creada.');
+      return id;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (/unauthorized|forbidden|admin|permission/i.test(message)) {
+        throw new Error('Neon Auth no autorizó la creación. Tu usuario superadmin también debe tener rol admin en Neon Auth en la rama de prueba.');
+      }
+      if (/already|exist|duplicate/i.test(message)) {
         throw new Error('Ese Gmail ya tiene una cuenta registrada en ARCREDIX.');
       }
-      if (response.status === 401 || response.status === 403) {
-        throw new Error('Neon Auth rechazó la operación administrativa. Cerrá sesión y volvé a ingresar.');
-      }
-      throw new Error(payload?.message || payload?.error || 'Neon Auth no pudo crear la cuenta del cliente.');
+      throw error;
     }
-
-    const id = payload?.id ?? payload?.user?.id;
-    if (!id) throw new Error('Neon Auth respondió sin el identificador de la cuenta creada.');
-    return id;
   };
 
   const rollbackAuthUser = async (authUserIdToDelete: string) => {
     try {
-      await fetch(authBaseUrl + '/admin/remove-user', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          cookie: sessionCookie,
-          origin: new URL(request.url).origin,
-        },
-        body: JSON.stringify({ userId: authUserIdToDelete }),
-        cache: 'no-store',
-      });
+      await auth.admin.removeUser({ userId: authUserIdToDelete });
     } catch (rollbackError) {
       console.error('ARCREDIX auth user compensation failed:', rollbackError);
     }
