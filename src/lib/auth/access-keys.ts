@@ -5,7 +5,8 @@ import { createHash, createHmac, randomInt } from 'node:crypto';
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 function pepper(): string {
-  const value = process.env.ARCREDIX_CREDENTIALS_ENCRYPTION_KEY
+  const value = process.env.ARCREDIX_ACCESS_CODE_PEPPER
+    || process.env.ARCREDIX_CREDENTIALS_ENCRYPTION_KEY
     || process.env.NEON_AUTH_COOKIE_SECRET;
   if (!value || value.length < 32) {
     throw new Error('Falta una clave segura para generar identificadores de ARCREDIX.');
