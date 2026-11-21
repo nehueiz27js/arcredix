@@ -16,7 +16,7 @@ type Merchant = {
   current_period_end: string | null;
   created_at: string;
 };
-type Stats = { merchants_total: number; merchants_pending: number; merchants_active: number; merchants_suspended: number; merchants_cancelled: number };
+type Stats = { merchants_total: number; merchants_pending: number; merchants_active: number; merchants_suspended: number; merchants_cancelled: number; merchants_due_soon: number };
 
 function formatDate(value: string | null) {
   if (!value) return 'Sin fecha';
@@ -29,11 +29,6 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [nowMs, setNowMs] = useState(0);
-
-  useEffect(() => {
-    setNowMs(Date.now());
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,11 +53,7 @@ export function AdminDashboard() {
     const amount = Number(merchant.price_usd);
     return total + (merchant.billing_interval === 'year' ? amount / 12 : amount);
   }, 0);
-  const dueSoon = merchants.filter((merchant) => {
-    if (!merchant.current_period_end || merchant.status !== 'active' || nowMs === 0) return false;
-    const days = (new Date(merchant.current_period_end).getTime() - nowMs) / 86400000;
-    return days >= 0 && days <= 7;
-  }).length;
+  const dueSoon = stats?.merchants_due_soon ?? 0;
   const cards = [
     { label: 'Clientes registrados', value: stats?.merchants_total ?? 0, icon: Building2 },
     { label: 'Clientes activos', value: stats?.merchants_active ?? 0, icon: Activity },
