@@ -34,8 +34,8 @@ type JwtClaims = Record<string, unknown> & {
 let databaseClient: NeonClient | undefined;
 let systemDatabaseClient: NeonClient | undefined;
 let authenticatedPool: Pool | undefined;
-let jwksCache: { keys: Ed25519Jwk[]; expiresAt: number } | undefined;
-let jwksRequest: Promise<Ed25519Jwk[]> | undefined;
+const jwksCache = new Map<string, { keys: Ed25519Jwk[]; expiresAt: number }>();
+const jwksRequests = new Map<string, Promise<Ed25519Jwk[]>>();
 
 function getDatabaseUrl(): string {
   const connectionString = process.env.DATABASE_URL?.trim();
@@ -96,16 +96,22 @@ function getAuthenticatedPool(): Pool {
   return authenticatedPool;
 }
 
-async function getNeonAuthJwks(): Promise<Ed25519Jwk[]> {
-  if (jwksCache && jwksCache.expiresAt > Date.now()) return jwksCache.keys;
+async function getNeonAuthJwks(issuer: string): Promise<Ed25519Jwk[]> {
+  const cached = jwksCache.get(issuer);
+  if (cached && cached.expiresAt > Date.now()) return cached.keys;
 
-  if (!jwksRequest) {
-    jwksRequest = (async () => {
-      const baseUrl = process.env.NEON_AUTH_BASE_URL?.trim();
-      if (!baseUrl) throw new Error('NEON_AUTH_BASE_URL no está configurada.');
+  let request = jwksRequests.get(issuer);
+  if (!request) {
+    request = (async () => {
+      const configuredBaseUrl = process.env.NEON_AUTH_BASE_URL?.trim();
+      if (!configuredBaseUrl) throw new Error('NEON_AUTH_BASE_URL no está configurada.');
 
-      const jwksUrl = process.env.NEON_AUTH_JWKS_URL?.trim()
-        || baseUrl.replace(/\/$/, '') + '/.well-known/jwks.json';
+      // An explicit JWKS URL can only be used for the primary configured issuer.
+      // For another trusted branch issuer, derive the JWKS endpoint from that issuer.
+      const primaryIssuer = configuredBaseUrl.replace(/\/$/, '');
+      const jwksUrl = issuer === primaryIssuer && process.env.NEON_AUTH_JWKS_URL?.trim()
+        ? process.env.NEON_AUTH_JWKS_URL.trim()
+        : issuer + '/.well-known/jwks.json';
       const response = await fetch(jwksUrl, {
         headers: { Accept: 'application/json' },
         cache: 'no-store',
@@ -123,14 +129,15 @@ async function getNeonAuthJwks(): Promise<Ed25519Jwk[]> {
         throw new Error('Neon Auth no publicó una clave Ed25519 compatible.');
       }
 
-      jwksCache = { keys, expiresAt: Date.now() + 5 * 60 * 1000 };
+      jwksCache.set(issuer, { keys, expiresAt: Date.now() + 5 * 60 * 1000 });
       return keys;
     })().finally(() => {
-      jwksRequest = undefined;
+      jwksRequests.delete(issuer);
     });
+    jwksRequests.set(issuer, request);
   }
 
-  return jwksRequest;
+  return request;
 }
 
 async function verifyNeonAuthToken(token: string): Promise<JwtClaims> {
@@ -152,8 +159,23 @@ async function verifyNeonAuthToken(token: string): Promise<JwtClaims> {
   }
 
   const baseUrl = process.env.NEON_AUTH_BASE_URL?.trim().replace(/\/$/, '');
-  if (!baseUrl || claims.iss.replace(/\/$/, '') !== baseUrl) {
-    throw new Error('El emisor del token no coincide con la instancia configurada de Neon Auth.');
+  const issuer = claims.iss.replace(/\/$/, '');
+  const allowedIssuers = new Set([
+    baseUrl,
+    ...(process.env.NEON_AUTH_ALLOWED_ISSUERS ?? '')
+      .split(',')
+      .map((value) => value.trim().replace(/\/$/, ''))
+      .filter(Boolean),
+  ]);
+
+  if (!baseUrl || !allowedIssuers.has(issuer)) {
+    // Only log issuer URLs (never the JWT, subject, cookies, or signature).
+    console.error('ARCREDIX Neon Auth issuer rejected:', {
+      issuer,
+      configuredIssuer: baseUrl,
+      allowedIssuers: [...allowedIssuers],
+    });
+    throw new Error('El emisor del token no está autorizado para esta instancia de ARCREDIX.');
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -161,14 +183,14 @@ async function verifyNeonAuthToken(token: string): Promise<JwtClaims> {
     throw new Error('La sesión de Neon Auth expiró o todavía no es válida.');
   }
 
-  let keys = await getNeonAuthJwks();
+  let keys = await getNeonAuthJwks(issuer);
   let jwk = header.kid
     ? keys.find((candidate) => candidate.kid === header.kid)
     : keys.length === 1 ? keys[0] : undefined;
 
   if (!jwk) {
-    jwksCache = undefined;
-    keys = await getNeonAuthJwks();
+    jwksCache.delete(issuer);
+    keys = await getNeonAuthJwks(issuer);
     jwk = header.kid
       ? keys.find((candidate) => candidate.kid === header.kid)
       : keys.length === 1 ? keys[0] : undefined;
