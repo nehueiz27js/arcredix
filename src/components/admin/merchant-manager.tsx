@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Building2, Plus, RefreshCw, Search, ShieldCheck, Tag } from 'lucide-react';
+import { Building2, Copy, Plus, RefreshCw, Search, ShieldCheck, Tag } from 'lucide-react';
 
 type MerchantStatus = 'pending' | 'active' | 'suspended' | 'cancelled';
 type LabelColor = 'rojo' | 'verde' | 'azul' | 'amarillo' | 'violeta';
@@ -50,9 +50,10 @@ export function MerchantManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [generatedAccess, setGeneratedAccess] = useState<{ email: string; passkey: string } | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const initialForm = { firstName: '', lastName: '', tradeName: '', holderRole: 'dueño', email: '', password: '', dni: '', planCode: '', billingStartDate: new Date().toISOString().slice(0, 10), labelColor: 'verde' as LabelColor, whatsappPhone: '' };
+  const initialForm = { firstName: '', lastName: '', tradeName: '', holderRole: 'dueño', email: '', dni: '', planCode: '', billingStartDate: new Date().toISOString().slice(0, 10), labelColor: 'verde' as LabelColor, whatsappPhone: '' };
   const [form, setForm] = useState(initialForm);
   const [plansError, setPlansError] = useState('');
 
@@ -92,7 +93,8 @@ export function MerchantManager() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? 'No se pudo dar de alta.');
-      setNotice('Cliente y cuenta de acceso creados correctamente en Neon Auth.');
+      setGeneratedAccess({ email: payload.access.email, passkey: payload.access.passkey });
+      setNotice('Cliente y cuenta de acceso creados correctamente. Copiá la clave ahora: no volverá a mostrarse.');
       setShowCreate(false);
       setForm({ ...initialForm, planCode: plans[0]?.code ?? '' });
       await load();
@@ -169,7 +171,6 @@ export function MerchantManager() {
             <label className="text-xs text-slate-400">Nombre del comercio<input required value={form.tradeName} onChange={(event) => setForm((current) => ({ ...current, tradeName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
             <label className="text-xs text-slate-400">Titular / cargo<select value={form.holderRole} onChange={(event) => setForm((current) => ({ ...current, holderRole: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="dueño">Dueño</option><option value="encargado">Encargado</option><option value="gerente">Gerente</option><option value="segundo_dueño">2° dueño</option></select></label>
             <label className="text-xs text-slate-400">Gmail de acceso<input required type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="nombre@gmail.com" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
-            <label className="text-xs text-slate-400">Contraseña inicial<input required type="password" minLength={8} autoComplete="new-password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /><span className="mt-1 block text-[11px] text-amber-200">La cuenta se crea de forma segura mediante Neon Auth.</span></label>
             <label className="text-xs text-slate-400">DNI<input required inputMode="numeric" value={form.dni} onChange={(event) => setForm((current) => ({ ...current, dni: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
             <label className="text-xs text-slate-400">Plan<select required value={form.planCode} onChange={(event) => setForm((current) => ({ ...current, planCode: event.target.value }))} disabled={plans.length === 0} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="">Seleccionar plan</option>{plans.map((plan) => <option key={plan.code} value={plan.code}>{plan.name} · {money(plan.monthly_price_usd)}/mes</option>)}</select></label>
             <label className="text-xs text-slate-400">Inicio de facturación<input required type="date" value={form.billingStartDate} onChange={(event) => setForm((current) => ({ ...current, billingStartDate: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
@@ -187,6 +188,18 @@ export function MerchantManager() {
         </div>
         {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-sm text-red-200">{error}</p>}
         {notice && <p role="status" className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3 text-sm text-emerald-200">{notice}</p>}
+        {generatedAccess && <div className="mt-3 rounded-lg border border-emerald-300/30 bg-[#07111a] p-4">
+          <p className="text-sm font-semibold text-white">Credenciales iniciales del cliente</p>
+          <p className="mt-2 text-xs text-slate-400">Correo de acceso</p>
+          <p className="break-all text-sm text-white">{generatedAccess.email}</p>
+          <p className="mt-3 text-xs text-slate-400">Clave única generada por ARCREDIX</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <code className="min-w-0 flex-1 break-all rounded-md bg-black/30 p-3 text-sm text-emerald-200">{generatedAccess.passkey}</code>
+            <button type="button" onClick={() => void navigator.clipboard.writeText(generatedAccess.passkey)} className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 px-3 text-sm text-white hover:border-emerald-300/50"><Copy size={14} /> Copiar clave</button>
+          </div>
+          <p className="mt-2 text-xs text-amber-200">Guardala y entregásela al titular. Por seguridad, esta clave solo se muestra en este momento.</p>
+          <button type="button" onClick={() => setGeneratedAccess(null)} className="mt-3 text-xs text-slate-400 underline">Cerrar credenciales</button>
+        </div>}
 
         {loading ? <p className="py-12 text-center text-sm text-slate-400">Cargando clientes…</p> : merchants.length === 0 ? <div className="py-12 text-center"><Building2 className="mx-auto text-slate-600" size={30} /><p className="mt-3 text-sm text-slate-300">No hay clientes con estos filtros.</p></div> : <div className="mt-5 space-y-3">
           {merchants.map((merchant) => {
