@@ -205,7 +205,7 @@ export function MerchantManager() {
         {notice && <p role="status" className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3 text-sm text-emerald-200">{notice}</p>}
         {generatedAccess && <div className="mt-3 rounded-lg border border-emerald-300/30 bg-[#07111a] p-4">
           <p className="text-sm font-semibold text-white">Identificador de acceso generado</p>
-          <p className="mt-2 text-xs text-slate-400">Entregá este identificador al titular. También queda disponible en la ficha del comercio.</p>
+          <p className="mt-2 text-xs text-slate-400">Entregá este identificador al titular y guardá una copia segura. Por seguridad, no vuelve a mostrarse.</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <code className="min-w-0 flex-1 break-all rounded-md bg-black/30 p-3 text-sm text-emerald-200">{generatedAccess.identifier}</code>
             <button type="button" onClick={() => void navigator.clipboard.writeText(generatedAccess.identifier)} className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 px-3 text-sm text-white hover:border-emerald-300/50"><Copy size={14} /> Copiar</button>
