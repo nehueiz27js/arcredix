@@ -15,6 +15,7 @@ type Merchant = {
   current_period_start: string | null; current_period_end: string | null;
   connection_limit: number | null; plan_features: Record<string, unknown> | null;
   users_count: number; connections_count: number; registers_count: number; qr_count: number;
+  access_identifier: string | null;
 };
 type Stats = { merchants_total: number; merchants_pending: number; merchants_active: number; merchants_suspended: number; merchants_cancelled: number };
 const emptyStats: Stats = { merchants_total: 0, merchants_pending: 0, merchants_active: 0, merchants_suspended: 0, merchants_cancelled: 0 };
@@ -50,10 +51,10 @@ export function MerchantManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [generatedAccess, setGeneratedAccess] = useState<{ email: string; passkey: string } | null>(null);
+  const [generatedAccess, setGeneratedAccess] = useState<{ identifier: string } | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const initialForm = { firstName: '', lastName: '', tradeName: '', holderRole: 'dueño', email: '', dni: '', planCode: '', billingStartDate: new Date().toISOString().slice(0, 10), labelColor: 'verde' as LabelColor, whatsappPhone: '' };
+  const initialForm = { ownerName: '', phone: '', email: '', planCode: '', labelName: '', labelColor: 'verde' as LabelColor, tradeName: '' };
   const [form, setForm] = useState(initialForm);
   const [plansError, setPlansError] = useState('');
 
@@ -93,8 +94,8 @@ export function MerchantManager() {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? 'No se pudo dar de alta.');
-      setGeneratedAccess({ email: payload.access.email, passkey: payload.access.passkey });
-      setNotice('Cliente y cuenta de acceso creados correctamente. Copiá la clave ahora: no volverá a mostrarse.');
+      setGeneratedAccess({ identifier: payload.access.identifier });
+      setNotice('Cliente creado y validado. El identificador quedó guardado de forma cifrada en Neon.');
       setShowCreate(false);
       setForm({ ...initialForm, planCode: plans[0]?.code ?? '' });
       await load();
@@ -165,18 +166,14 @@ export function MerchantManager() {
 
         {showCreate && <form onSubmit={createMerchant} className="mt-5 rounded-xl border border-emerald-300/20 bg-[#07111a] p-4">
           <h3 className="font-semibold">Alta de cliente</h3>
+          <p className="mt-1 text-xs text-slate-400">ARCREDIX genera automáticamente el identificador y lo guarda protegido en Neon.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <label className="text-xs text-slate-400">Nombre<input required value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
-            <label className="text-xs text-slate-400">Apellido<input required value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
-            <label className="text-xs text-slate-400">Nombre del comercio<input required value={form.tradeName} onChange={(event) => setForm((current) => ({ ...current, tradeName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
-            <label className="text-xs text-slate-400">Titular / cargo<select value={form.holderRole} onChange={(event) => setForm((current) => ({ ...current, holderRole: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="dueño">Dueño</option><option value="encargado">Encargado</option><option value="gerente">Gerente</option><option value="segundo_dueño">2° dueño</option></select></label>
-            <label className="text-xs text-slate-400">Gmail de acceso<input required type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="nombre@gmail.com" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
-            <label className="text-xs text-slate-400">DNI<input required inputMode="numeric" value={form.dni} onChange={(event) => setForm((current) => ({ ...current, dni: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Nombre del titular<input required value={form.ownerName} onChange={(event) => setForm((current) => ({ ...current, ownerName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Número de teléfono<input required type="tel" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} placeholder="+54 9 ..." className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Correo electrónico<input required type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="nombre@empresa.com" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
             <label className="text-xs text-slate-400">Plan<select required value={form.planCode} onChange={(event) => setForm((current) => ({ ...current, planCode: event.target.value }))} disabled={plans.length === 0} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="">Seleccionar plan</option>{plans.map((plan) => <option key={plan.code} value={plan.code}>{plan.name} · {money(plan.monthly_price_usd)}/mes</option>)}</select></label>
-            <label className="text-xs text-slate-400">Inicio de facturación<input required type="date" value={form.billingStartDate} onChange={(event) => setForm((current) => ({ ...current, billingStartDate: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
-            <label className="text-xs text-slate-400">Próximo pago<input readOnly value={form.billingStartDate ? new Date(new Date(form.billingStartDate + 'T12:00:00').getTime() + 30 * 86400000).toLocaleDateString('es-AR') : ''} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#101d28] px-3 text-sm text-slate-300" /></label>
-            <label className="text-xs text-slate-400">Etiqueta<select value={form.labelColor} onChange={(event) => setForm((current) => ({ ...current, labelColor: event.target.value as LabelColor }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="rojo">Rojo</option><option value="verde">Verde</option><option value="azul">Azul</option><option value="amarillo">Amarillo</option><option value="violeta">Violeta</option></select></label>
-            <label className="text-xs text-slate-400">WhatsApp<input required type="tel" value={form.whatsappPhone} onChange={(event) => setForm((current) => ({ ...current, whatsappPhone: event.target.value }))} placeholder="+54 9 ..." className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Etiqueta<input required maxLength={40} value={form.labelName} onChange={(event) => setForm((current) => ({ ...current, labelName: event.target.value }))} placeholder="Ej. Cliente prioritario" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Nombre comercial<input required value={form.tradeName} onChange={(event) => setForm((current) => ({ ...current, tradeName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
           </div>
           {plansError && <p role="alert" className="mt-3 text-sm text-red-300">{plansError}</p>}
           <div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setShowCreate(false)} className="rounded-lg border border-white/15 px-4 py-2 text-sm">Cancelar</button><button disabled={creating || plans.length === 0} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-semibold text-[#04130e] disabled:opacity-50">{creating ? 'Creando…' : 'Crear cliente'}</button></div>
@@ -189,16 +186,13 @@ export function MerchantManager() {
         {error && <p role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/5 p-3 text-sm text-red-200">{error}</p>}
         {notice && <p role="status" className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3 text-sm text-emerald-200">{notice}</p>}
         {generatedAccess && <div className="mt-3 rounded-lg border border-emerald-300/30 bg-[#07111a] p-4">
-          <p className="text-sm font-semibold text-white">Credenciales iniciales del cliente</p>
-          <p className="mt-2 text-xs text-slate-400">Correo de acceso</p>
-          <p className="break-all text-sm text-white">{generatedAccess.email}</p>
-          <p className="mt-3 text-xs text-slate-400">Clave única generada por ARCREDIX</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <code className="min-w-0 flex-1 break-all rounded-md bg-black/30 p-3 text-sm text-emerald-200">{generatedAccess.passkey}</code>
-            <button type="button" onClick={() => void navigator.clipboard.writeText(generatedAccess.passkey)} className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 px-3 text-sm text-white hover:border-emerald-300/50"><Copy size={14} /> Copiar clave</button>
+          <p className="text-sm font-semibold text-white">Identificador de acceso generado</p>
+          <p className="mt-2 text-xs text-slate-400">Entregá este identificador al titular. También queda disponible en la ficha del comercio.</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <code className="min-w-0 flex-1 break-all rounded-md bg-black/30 p-3 text-sm text-emerald-200">{generatedAccess.identifier}</code>
+            <button type="button" onClick={() => void navigator.clipboard.writeText(generatedAccess.identifier)} className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 px-3 text-sm text-white hover:border-emerald-300/50"><Copy size={14} /> Copiar</button>
           </div>
-          <p className="mt-2 text-xs text-amber-200">Guardala y entregásela al titular. Por seguridad, esta clave solo se muestra en este momento.</p>
-          <button type="button" onClick={() => setGeneratedAccess(null)} className="mt-3 text-xs text-slate-400 underline">Cerrar credenciales</button>
+          <button type="button" onClick={() => setGeneratedAccess(null)} className="mt-3 text-xs text-slate-400 underline">Cerrar</button>
         </div>}
 
         {loading ? <p className="py-12 text-center text-sm text-slate-400">Cargando clientes…</p> : merchants.length === 0 ? <div className="py-12 text-center"><Building2 className="mx-auto text-slate-600" size={30} /><p className="mt-3 text-sm text-slate-300">No hay clientes con estos filtros.</p></div> : <div className="mt-5 space-y-3">
@@ -217,6 +211,13 @@ export function MerchantManager() {
                   <p className="mt-1 break-all text-sm text-slate-300">{merchant.email}{merchant.whatsapp_phone ? ' · WhatsApp ' + merchant.whatsapp_phone : ''}</p>
                 </div>
                 <div className="text-left sm:text-right"><p className="text-sm font-medium">{merchant.plan_name ?? 'Sin plan asignado'}</p><p className="mt-1 text-xs text-slate-400">{money(merchant.price_usd)} / {merchant.billing_interval === 'year' ? 'año' : merchant.billing_interval === 'one_time' ? 'único' : 'mes'}</p><p className="mt-1 text-xs text-slate-500">Límite conexiones: {merchant.connection_limit ?? 'Ilimitado'}</p></div>
+              </div>
+              <div className="mt-4 rounded-lg border border-white/5 bg-[#0b1721] p-3">
+                <p className="text-xs font-medium text-slate-300">Identificador de acceso</p>
+                {merchant.access_identifier ? <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <code className="min-w-0 flex-1 break-all text-xs text-emerald-200">{merchant.access_identifier}</code>
+                  <button type="button" onClick={() => void navigator.clipboard.writeText(merchant.access_identifier || '')} className="inline-flex h-8 items-center gap-2 rounded-md border border-white/15 px-2 text-xs text-white hover:border-emerald-300/50"><Copy size={13} /> Copiar</button>
+                </div> : <p className="mt-1 text-xs text-amber-200">Sin identificador asignado (registro histórico).</p>}
               </div>
               <div className="mt-4 grid gap-2 text-xs text-slate-400 sm:grid-cols-2 xl:grid-cols-4">
                 <p>Alta: <span className="text-slate-200">{dateLabel(merchant.created_at)}</span></p><p>Vencimiento: <span className="text-slate-200">{dateLabel(merchant.current_period_end)}</span></p><p>Usuarios: <span className="text-slate-200">{merchant.users_count}</span> · Conexiones: <span className="text-slate-200">{merchant.connections_count}</span></p><p>Cajas: <span className="text-slate-200">{merchant.registers_count}</span> · QRs: <span className="text-slate-200">{merchant.qr_count}</span></p>
