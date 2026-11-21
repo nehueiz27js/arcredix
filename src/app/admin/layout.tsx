@@ -10,6 +10,7 @@ import { SignOutButton } from '@/components/auth/sign-out-button';
 export const dynamic = 'force-dynamic';
 
 const sections = [
+  { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin', label: 'Comercios', icon: Building2 },
   { href: '/admin/planes', label: 'Planes y límites', icon: Tags },
   { href: '/admin/suscripciones', label: 'Suscripciones', icon: CreditCard },
