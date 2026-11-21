@@ -1,3 +1,5 @@
+import { SignJWT, jwtVerify } from 'jose';
+
 export const CLIENT_SESSION_COOKIE = 'cli_session';
 export const CLIENT_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
@@ -10,7 +12,6 @@ function sessionKey() {
 }
 
 export async function signClientSessionToken(subject: string) {
-  const { SignJWT } = await import('jose');
   return new SignJWT({ role: 'client' })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(subject)
@@ -22,7 +23,6 @@ export async function signClientSessionToken(subject: string) {
 export async function verifyClientSessionToken(token: string | undefined) {
   if (!token) return null;
   try {
-    const { jwtVerify } = await import('jose');
     const { payload } = await jwtVerify(token, sessionKey(), { algorithms: ['HS256'] });
     if (payload.role !== 'client' || typeof payload.sub !== 'string' || !payload.sub) return null;
     return { sub: payload.sub };
