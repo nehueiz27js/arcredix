@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { createHmac } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { SignJWT, jwtVerify } from 'jose';
 
@@ -12,7 +13,7 @@ function sessionKey() {
   if (!secret || secret.length < 32) {
     throw new Error('Falta una clave segura de sesión de ARCREDIX (mínimo 32 caracteres).');
   }
-  return new TextEncoder().encode(secret);
+  return createHmac('sha256', secret).update('arc-redix:client-session:v1').digest();
 }
 
 export async function createClientSession(subject: string) {
