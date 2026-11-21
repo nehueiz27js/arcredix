@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -6,15 +6,27 @@ import { LogOut } from 'lucide-react';
 
 import { authClient } from '@/lib/auth/client';
 
-export function SignOutButton() {
+type SignOutButtonProps = { mode?: 'admin' | 'client' };
+
+export function SignOutButton({ mode = 'admin' }: SignOutButtonProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function signOut() {
+    if (busy) return;
     setBusy(true);
     try {
-      await authClient.signOut();
-      router.replace('/login');
+      if (mode === 'client') {
+        const response = await fetch('/api/auth/client-logout', {
+          method: 'POST',
+          cache: 'no-store',
+        });
+        if (!response.ok) throw new Error('No se pudo cerrar la sesión.');
+      } else {
+        await authClient.signOut();
+      }
+      router.replace(mode === 'admin' ? '/admin/login' : '/login');
+      router.refresh();
     } finally {
       setBusy(false);
     }
