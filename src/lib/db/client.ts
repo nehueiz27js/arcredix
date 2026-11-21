@@ -23,14 +23,6 @@ type Ed25519Jwk = {
   use?: string;
 };
 type JwksResponse = { keys?: Ed25519Jwk[] };
-type AuthenticatedQueryResult = {
-  rows: Record<string, unknown>[];
-  rowCount: number | null;
-};
-type AuthenticatedSql = (
-  strings: TemplateStringsArray,
-  ...values: unknown[]
-) => Promise<AuthenticatedQueryResult>;
 
 let databaseClient: NeonClient | undefined;
 let systemDatabaseClient: NeonClient | undefined;
@@ -200,12 +192,6 @@ export function getSystemDatabase(): NeonClient {
   return systemDatabaseClient;
 }
 
-/**
- * Authenticated PostgreSQL queries must use a real startup packet because
- * pg_session_jwt.jwk is a startup-only parameter. The HTTP neon() query function
- * cannot provide session startup parameters, so each tagged query gets a short
- * WebSocket-backed transaction with the JWK already supplied by Pool.
- */
 /**
  * Authenticated PostgreSQL queries must use a real startup packet because
  * pg_session_jwt.jwk is a startup-only parameter. The HTTP neon() query function
