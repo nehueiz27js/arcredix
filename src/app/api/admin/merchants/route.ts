@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { randomBytes } from 'node:crypto';
+import { createAccessKey, decryptAccessKey } from '@/lib/auth/access-keys';
 import { auth } from '@/lib/auth/server';
 import { isSuperAdminEmail } from '@/lib/auth/superadmin';
 import { getAuthenticatedDatabase } from '@/lib/db/client';
@@ -29,6 +29,7 @@ export async function GET(request: Request) {
       sql`
         SELECT m.id, m.legal_name, m.trade_name, m.owner_name, m.email, m.phone,
           m.whatsapp_phone, m.tax_id, m.status, m.created_at, m.metadata,
+          access.access_key_ciphertext, access.access_key_nonce, access.access_key_tag,
           latest.plan_name, latest.plan_code, latest.subscription_status,
           latest.billing_interval, latest.price_usd, latest.current_period_start,
           latest.current_period_end, latest.connection_limit, latest.plan_features,
@@ -44,6 +45,12 @@ export async function GET(request: Request) {
           FROM public.subscriptions s JOIN public.plans p ON p.id=s.plan_id
           WHERE s.merchant_id=m.id ORDER BY s.created_at DESC LIMIT 1
         ) latest ON true
+        LEFT JOIN LATERAL (
+          SELECT access_key_ciphertext, access_key_nonce, access_key_tag
+          FROM public.merchant_users
+          WHERE merchant_id=m.id AND status='active'
+          ORDER BY created_at ASC LIMIT 1
+        ) access ON true
         WHERE (${status}='all' OR m.status=${status})
           AND (${search}='' OR m.legal_name ILIKE ${'%' + search + '%'}
             OR coalesce(m.trade_name,'') ILIKE ${'%' + search + '%'}
@@ -66,7 +73,21 @@ export async function GET(request: Request) {
         ))::int AS merchants_due_soon
         FROM public.merchants`,
     ]);
-    const merchants = Array.isArray(merchantResult) ? merchantResult : merchantResult.rows;
+    const rawMerchants = Array.isArray(merchantResult) ? merchantResult : merchantResult.rows;
+    const merchants = rawMerchants.map((merchant: Record<string, unknown>) => {
+      const accessIdentifier = decryptAccessKey({
+        ciphertext: merchant.access_key_ciphertext as string | null,
+        nonce: merchant.access_key_nonce as string | null,
+        tag: merchant.access_key_tag as string | null,
+      });
+      const {
+        access_key_ciphertext: _ciphertext,
+        access_key_nonce: _nonce,
+        access_key_tag: _tag,
+        ...safeMerchant
+      } = merchant;
+      return { ...safeMerchant, access_identifier: accessIdentifier };
+    });
     const stats = Array.isArray(statsResult) ? statsResult[0] : statsResult.rows[0];
     return NextResponse.json({ data: merchants, stats, meta: { returned: merchants.length, limit: 200 } });
   } catch (error) {
@@ -89,17 +110,14 @@ const neonAdminApi = (auth as unknown as { api: NeonAdminApi }).api;
 
 const labelColors = ['rojo','verde','azul','amarillo','violeta'] as const;
 const createSchema = z.object({
-  firstName: z.string().trim().min(2).max(100),
-  lastName: z.string().trim().min(2).max(100),
-  tradeName: z.string().trim().min(2).max(200),
-  holderRole: z.enum(['dueño','encargado','gerente','segundo_dueño']),
+  ownerName: z.string().trim().min(2).max(160),
+  phone: z.string().trim().min(6).max(40),
   email: z.string().trim().email().max(256),
-  dni: z.string().trim().min(6).max(20),
   planCode: z.enum(['starter','growth','business']),
-  billingStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  labelColor: z.enum(labelColors),
-  whatsappPhone: z.string().trim().min(6).max(40),
-})
+  labelName: z.string().trim().min(2).max(40),
+  labelColor: z.enum(labelColors).default('verde'),
+  tradeName: z.string().trim().min(2).max(200),
+});
 
 export async function POST(request: Request) {
   const user = await authorize();
@@ -107,22 +125,13 @@ export async function POST(request: Request) {
 
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Revisá los datos del cliente y el plan.' }, { status: 400 });
+    return NextResponse.json({ error: 'Completá nombre, teléfono, correo, plan, etiqueta y nombre comercial.' }, { status: 400 });
   }
 
   const input = parsed.data;
   const email = input.email.toLowerCase();
-  const ownerName = input.firstName + ' ' + input.lastName;
-  const generatedPasskey = randomBytes(32).toString('base64url');
-  const mappedRole = input.holderRole === 'dueño' ? 'owner' : input.holderRole === 'encargado' ? 'manager' : 'admin';
-  const labelNames: Record<typeof input.labelColor, string> = {
-    rojo: 'Rojo',
-    verde: 'Verde',
-    azul: 'Azul',
-    amarillo: 'Amarillo',
-    violeta: 'Violeta',
-  };
-
+  const ownerName = input.ownerName;
+  const accessKey = createAccessKey();
   let authUserId: string | null = null;
 
   const provisionAuthUser = async () => {
@@ -130,30 +139,35 @@ export async function POST(request: Request) {
       const result = await neonAdminApi.createUser({
         body: {
           email,
-          password: generatedPasskey,
+          password: accessKey.identifier,
           name: ownerName,
           role: 'user',
         },
         headers: request.headers,
       });
-      const created = result as unknown as { id?: string; user?: { id?: string }; data?: { id?: string; user?: { id?: string } }; error?: { message?: string } };
+      const created = result as unknown as {
+        id?: string;
+        user?: { id?: string };
+        data?: { id?: string; user?: { id?: string } };
+        error?: { message?: string };
+      };
       if (created.error) {
-        const message = created.error.message || 'Neon Auth no pudo crear la cuenta del cliente.';
+        const message = created.error.message || 'Neon Auth no pudo crear la identidad interna.';
         if (/already|exist|duplicate/i.test(message)) {
-          throw new Error('Ese Gmail ya tiene una cuenta registrada en ARCREDIX.');
+          throw new Error('Ese correo ya tiene una identidad registrada en ARCREDIX.');
         }
         throw new Error(message);
       }
       const id = created.data?.id ?? created.data?.user?.id ?? created.id ?? created.user?.id;
-      if (!id) throw new Error('Neon Auth respondió sin el identificador de la cuenta creada.');
+      if (!id) throw new Error('Neon Auth respondió sin el identificador de la identidad creada.');
       return id;
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       if (/unauthorized|forbidden|admin|permission/i.test(message)) {
-        throw new Error('Neon Auth no autorizó la creación. Tu usuario superadmin también debe tener rol admin en Neon Auth en la rama de prueba.');
+        throw new Error('Neon Auth no autorizó la creación de la identidad interna del cliente.');
       }
       if (/already|exist|duplicate/i.test(message)) {
-        throw new Error('Ese Gmail ya tiene una cuenta registrada en ARCREDIX.');
+        throw new Error('Ese correo ya tiene una identidad registrada en ARCREDIX.');
       }
       throw error;
     }
@@ -166,7 +180,7 @@ export async function POST(request: Request) {
         headers: request.headers,
       });
     } catch (rollbackError) {
-      console.error('ARCREDIX auth user compensation failed:', rollbackError);
+      console.error('ARCREDIX auth identity compensation failed:', rollbackError);
     }
   };
 
@@ -177,7 +191,7 @@ export async function POST(request: Request) {
       SELECT id FROM public.merchants WHERE lower(email)=${email} LIMIT 1
     `;
     if ((Array.isArray(existing) ? existing : existing.rows).length) {
-      return NextResponse.json({ error: 'Ya existe un comercio registrado con ese Gmail.' }, { status: 409 });
+      return NextResponse.json({ error: 'Ya existe un comercio registrado con ese correo.' }, { status: 409 });
     }
 
     const planCheck = await sql`
@@ -193,47 +207,67 @@ export async function POST(request: Request) {
       WITH plan AS (
         SELECT id, monthly_price_usd FROM public.plans WHERE code=${input.planCode} AND is_active=true
       ), merchant AS (
-        INSERT INTO public.merchants (legal_name,trade_name,owner_name,email,whatsapp_phone,tax_id,status,metadata)
-        SELECT ${input.tradeName},${input.tradeName},${ownerName},${email},${input.whatsappPhone},${input.dni},
-          'active',jsonb_build_object('admin_label',jsonb_build_object('name',${labelNames[input.labelColor]},'color',${input.labelColor}),
-          'holder_role',${input.holderRole},'dni',${input.dni})
-        FROM plan RETURNING id,created_at
+        INSERT INTO public.merchants (
+          legal_name, trade_name, owner_name, email, phone, whatsapp_phone, tax_id, status, metadata
+        )
+        SELECT ${input.tradeName}, ${input.tradeName}, ${ownerName}, ${email},
+          ${input.phone}, ${input.phone}, NULL, 'active',
+          jsonb_build_object(
+            'admin_label', jsonb_build_object('name', ${input.labelName}, 'color', ${input.labelColor}),
+            'created_by', ${user.email},
+            'source', 'superadmin'
+          )
+        FROM plan RETURNING id, created_at
       ), subscription AS (
-        INSERT INTO public.subscriptions (merchant_id,plan_id,status,billing_interval,price_usd,starts_at,current_period_start,current_period_end,metadata)
-        SELECT m.id,p.id,'active','month',p.monthly_price_usd,${input.billingStartDate}::date,
-          ${input.billingStartDate}::date,${input.billingStartDate}::date + interval '30 days',
-          jsonb_build_object('created_by',${user.email},'source','superadmin')
-        FROM merchant m CROSS JOIN plan p RETURNING id,merchant_id
+        INSERT INTO public.subscriptions (
+          merchant_id, plan_id, status, billing_interval, price_usd,
+          starts_at, current_period_start, current_period_end, metadata
+        )
+        SELECT m.id, p.id, 'active', 'month', p.monthly_price_usd,
+          now(), now(), now() + interval '30 days',
+          jsonb_build_object('created_by', ${user.email}, 'source', 'superadmin')
+        FROM merchant m CROSS JOIN plan p RETURNING id, merchant_id
       ), membership AS (
-        INSERT INTO public.merchant_users (merchant_id,auth_subject,email,full_name,role,status)
-        SELECT id,${authUserId},${email},${ownerName},${mappedRole},'active' FROM merchant RETURNING merchant_id
+        INSERT INTO public.merchant_users (
+          merchant_id, auth_subject, email, full_name, role, status,
+          access_key_hash, access_key_ciphertext, access_key_nonce, access_key_tag, access_key_created_at
+        )
+        SELECT id, ${authUserId}, ${email}, ${ownerName}, 'owner', 'active',
+          ${accessKey.hash}, ${accessKey.ciphertext}, ${accessKey.nonce}, ${accessKey.tag}, now()
+        FROM merchant RETURNING merchant_id
       ), audit AS (
-        INSERT INTO public.audit_logs (merchant_id,actor_type,action,entity_type,entity_id,reason,after_data)
-        SELECT id,'superadmin','merchant.created','merchant',id,'Alta con cuenta Neon Auth desde superadmin',
-          jsonb_build_object('email',${email},'auth_user_id',${authUserId},'plan',${input.planCode},'billing_start',${input.billingStartDate},'holder_role',${input.holderRole})
+        INSERT INTO public.audit_logs (
+          merchant_id, actor_type, action, entity_type, entity_id, reason, after_data
+        )
+        SELECT id, 'superadmin', 'merchant.created', 'merchant', id,
+          'Alta de comercio con identificador de acceso ARCREDIX',
+          jsonb_build_object('email', ${email}, 'auth_user_id', ${authUserId},
+            'plan', ${input.planCode}, 'access_key_created', true)
         FROM merchant RETURNING id
       )
-      SELECT m.id,m.created_at,s.id AS subscription_id,mm.merchant_id
-      FROM merchant m JOIN subscription s ON s.merchant_id=m.id
-      JOIN membership mm ON mm.merchant_id=m.id CROSS JOIN audit
+      SELECT m.id, m.created_at, s.id AS subscription_id, mm.merchant_id
+      FROM merchant m
+      JOIN subscription s ON s.merchant_id=m.id
+      JOIN membership mm ON mm.merchant_id=m.id
+      CROSS JOIN audit
     `;
 
     const rows = Array.isArray(result) ? result : result.rows;
     if (!rows.length) {
       await rollbackAuthUser(authUserId);
       authUserId = null;
-      return NextResponse.json({ error: 'No se pudo completar el alta comercial. La cuenta de acceso fue revertida.' }, { status: 500 });
+      return NextResponse.json({ error: 'No se pudo completar el alta. La identidad interna fue revertida.' }, { status: 500 });
     }
 
     return NextResponse.json({
       data: rows[0],
-      access: { status: 'created', authUserId, email, passkey: generatedPasskey },
+      access: { status: 'created', identifier: accessKey.identifier },
     }, { status: 201 });
   } catch (error) {
     if (authUserId) await rollbackAuthUser(authUserId);
     console.error('ARCREDIX admin merchants POST failed:', error);
     const message = error instanceof Error ? error.message : 'No se pudo crear el cliente.';
-    const status = message.includes('Gmail ya') ? 409 : /Neon Auth no autorizó|Neon Auth rechazó/.test(message) ? 403 : 500;
+    const status = /correo ya|identidad registrada/i.test(message) ? 409 : /Neon Auth no autorizó/.test(message) ? 403 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
