@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Building2, Plus, RefreshCw, Search, ShieldCheck, Tag } from 'lucide-react';
 
 type MerchantStatus = 'pending' | 'active' | 'suspended' | 'cancelled';
-type LabelColor = 'emerald' | 'blue' | 'violet' | 'amber' | 'rose' | 'cyan' | 'slate';
+type LabelColor = 'rojo' | 'verde' | 'azul' | 'amarillo' | 'violeta';
 type Plan = { id: string; code: string; name: string; monthly_price_usd: string | number; connection_limit: number | null; is_active: boolean };
 type Merchant = {
   id: string; legal_name: string; trade_name: string | null; owner_name: string | null;
@@ -19,8 +19,7 @@ type Merchant = {
 type Stats = { merchants_total: number; merchants_pending: number; merchants_active: number; merchants_suspended: number; merchants_cancelled: number };
 const emptyStats: Stats = { merchants_total: 0, merchants_pending: 0, merchants_active: 0, merchants_suspended: 0, merchants_cancelled: 0 };
 const colorClasses: Record<LabelColor, string> = {
-  emerald: 'bg-emerald-400', blue: 'bg-blue-400', violet: 'bg-violet-400',
-  amber: 'bg-amber-400', rose: 'bg-rose-400', cyan: 'bg-cyan-400', slate: 'bg-slate-400',
+  rojo: 'bg-red-500', verde: 'bg-emerald-400', azul: 'bg-blue-400', amarillo: 'bg-yellow-400', violeta: 'bg-violet-400',
 };
 const statusLabels: Record<MerchantStatus, string> = { pending: 'Pendiente', active: 'Activo', suspended: 'Suspendido', cancelled: 'Cancelado' };
 
@@ -53,11 +52,9 @@ export function MerchantManager() {
   const [notice, setNotice] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({
-    legalName: '', tradeName: '', ownerName: '', email: '', phone: '', whatsappPhone: '', taxId: '',
-    planCode: 'starter', billingInterval: 'month', status: 'pending',
-    labelName: '', labelColor: 'emerald',
-  });
+  const initialForm = { firstName: '', lastName: '', tradeName: '', holderRole: 'dueño', email: '', password: '', dni: '', planCode: '', billingStartDate: new Date().toISOString().slice(0, 10), labelColor: 'verde' as LabelColor, whatsappPhone: '' };
+  const [form, setForm] = useState(initialForm);
+  const [plansError, setPlansError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -77,23 +74,27 @@ export function MerchantManager() {
     return () => window.clearTimeout(timeoutId);
   }, [load]);
   useEffect(() => {
-    fetch('/api/admin/plans', { cache: 'no-store' }).then(async (response) => {
+    fetch('/api/public/plans', { cache: 'no-store' }).then(async (response) => {
       const payload = await response.json();
-      if (response.ok) setPlans((payload.data ?? []).filter((plan: Plan) => plan.is_active));
-    }).catch(() => setPlans([]));
+      if (!response.ok) throw new Error(payload.error ?? 'No se pudo cargar el catálogo de planes.');
+      const available = (payload.plans ?? []).map((plan: Omit<Plan, 'id' | 'is_active'>) => ({ ...plan, id: plan.code, is_active: true }));
+      setPlans(available);
+      setForm((current) => ({ ...current, planCode: current.planCode || available[0]?.code || '' }));
+      if (available.length === 0) setPlansError('No hay planes activos disponibles.');
+    }).catch((caught) => setPlansError(caught instanceof Error ? caught.message : 'No se pudieron cargar los planes.'));
   }, []);
 
   async function createMerchant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setCreating(true); setError(''); setNotice('');
     try {
       const response = await fetch('/api/admin/merchants', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, password: undefined }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? 'No se pudo dar de alta.');
       setNotice('Alta comercial creada. La cuenta de acceso Neon Auth del titular queda pendiente de provisionamiento.');
       setShowCreate(false);
-      setForm({ legalName: '', tradeName: '', ownerName: '', email: '', phone: '', whatsappPhone: '', taxId: '', planCode: 'starter', billingInterval: 'month', status: 'pending', labelName: '', labelColor: 'emerald' });
+      setForm({ ...initialForm, planCode: plans[0]?.code ?? '' });
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Error inesperado.');
@@ -161,17 +162,22 @@ export function MerchantManager() {
         </div>
 
         {showCreate && <form onSubmit={createMerchant} className="mt-5 rounded-xl border border-emerald-300/20 bg-[#07111a] p-4">
-          <h3 className="font-semibold">Nuevo comercio y plan</h3>
-          <p className="mt-1 text-xs text-slate-400">El registro comercial se crea ahora. El acceso del titular se vincula mediante invitación segura.</p>
+          <h3 className="font-semibold">Alta de cliente</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {([
-              ['legalName','Razón social / nombre legal'],['tradeName','Nombre comercial'],['ownerName','Titular'],['email','Email de acceso'],['phone','Teléfono'],['whatsappPhone','WhatsApp'],['taxId','CUIT / identificación'],['labelName','Etiqueta (opcional)'],
-            ] as const).map(([key, label]) => <label key={key} className="text-xs text-slate-400">{label}<input required={['legalName','ownerName','email'].includes(key)} type={key === 'email' ? 'email' : 'text'} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white outline-none focus:border-emerald-300/50" /></label>)}
-            <label className="text-xs text-slate-400">Plan<select value={form.planCode} onChange={(event) => setForm((current) => ({ ...current, planCode: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white">{plans.map((plan) => <option key={plan.code} value={plan.code}>{plan.name} · {money(plan.monthly_price_usd)}/mes</option>)}</select></label>
-            <label className="text-xs text-slate-400">Facturación<select value={form.billingInterval} onChange={(event) => setForm((current) => ({ ...current, billingInterval: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="month">Mensual</option><option value="year">Anual</option><option value="one_time">Pago único · USD 390</option></select></label>
-            <label className="text-xs text-slate-400">Estado inicial<select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="pending">Pendiente</option><option value="active">Activo</option></select></label>
-            <label className="text-xs text-slate-400">Color etiqueta<select value={form.labelColor} onChange={(event) => setForm((current) => ({ ...current, labelColor: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white">{Object.keys(colorClasses).map((color) => <option key={color} value={color}>{color}</option>)}</select></label>
+            <label className="text-xs text-slate-400">Nombre<input required value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Apellido<input required value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Nombre del comercio<input required value={form.tradeName} onChange={(event) => setForm((current) => ({ ...current, tradeName: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Titular / cargo<select value={form.holderRole} onChange={(event) => setForm((current) => ({ ...current, holderRole: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="dueño">Dueño</option><option value="encargado">Encargado</option><option value="gerente">Gerente</option><option value="segundo_dueño">2° dueño</option></select></label>
+            <label className="text-xs text-slate-400">Gmail de acceso<input required type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="nombre@gmail.com" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Contraseña inicial<input required type="password" minLength={8} autoComplete="new-password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /><span className="mt-1 block text-[11px] text-amber-200">El acceso Neon Auth todavía requiere integración segura; la contraseña no se guarda ni se envía.</span></label>
+            <label className="text-xs text-slate-400">DNI<input required inputMode="numeric" value={form.dni} onChange={(event) => setForm((current) => ({ ...current, dni: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Plan<select required value={form.planCode} onChange={(event) => setForm((current) => ({ ...current, planCode: event.target.value }))} disabled={plans.length === 0} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="">Seleccionar plan</option>{plans.map((plan) => <option key={plan.code} value={plan.code}>{plan.name} · {money(plan.monthly_price_usd)}/mes</option>)}</select></label>
+            <label className="text-xs text-slate-400">Inicio de facturación<input required type="date" value={form.billingStartDate} onChange={(event) => setForm((current) => ({ ...current, billingStartDate: event.target.value }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
+            <label className="text-xs text-slate-400">Próximo pago<input readOnly value={form.billingStartDate ? new Date(new Date(form.billingStartDate + 'T12:00:00').getTime() + 30 * 86400000).toLocaleDateString('es-AR') : ''} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#101d28] px-3 text-sm text-slate-300" /></label>
+            <label className="text-xs text-slate-400">Etiqueta<select value={form.labelColor} onChange={(event) => setForm((current) => ({ ...current, labelColor: event.target.value as LabelColor }))} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white"><option value="rojo">Rojo</option><option value="verde">Verde</option><option value="azul">Azul</option><option value="amarillo">Amarillo</option><option value="violeta">Violeta</option></select></label>
+            <label className="text-xs text-slate-400">WhatsApp<input required type="tel" value={form.whatsappPhone} onChange={(event) => setForm((current) => ({ ...current, whatsappPhone: event.target.value }))} placeholder="+54 9 ..." className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-[#0b1721] px-3 text-sm text-white" /></label>
           </div>
+          {plansError && <p role="alert" className="mt-3 text-sm text-red-300">{plansError}</p>}
           <div className="mt-4 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setShowCreate(false)} className="rounded-lg border border-white/15 px-4 py-2 text-sm">Cancelar</button><button disabled={creating || plans.length === 0} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-semibold text-[#04130e] disabled:opacity-50">{creating ? 'Creando…' : 'Crear cliente'}</button></div>
         </form>}
 
@@ -206,7 +212,7 @@ export function MerchantManager() {
                 <div className="flex items-center gap-2 text-xs font-medium text-slate-300"><Tag size={14} /> Etiqueta del cliente</div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_150px_auto]">
                   <input value={labelNames[merchant.id] ?? label.name} onChange={(event) => setLabelNames((current) => ({ ...current, [merchant.id]: event.target.value }))} placeholder="Ej. Plan Growth, prioridad, soporte…" className="h-9 min-w-0 rounded-md border border-white/10 bg-[#07111a] px-3 text-sm outline-none" />
-                  <select value={labelColors[merchant.id] ?? label.color} onChange={(event) => setLabelColors((current) => ({ ...current, [merchant.id]: event.target.value as LabelColor }))} className="h-9 rounded-md border border-white/10 bg-[#07111a] px-2 text-sm text-white">{Object.keys(colorClasses).map((color) => <option key={color} value={color}>{color}</option>)}</select>
+                  <select value={labelColors[merchant.id] ?? label.color} onChange={(event) => setLabelColors((current) => ({ ...current, [merchant.id]: event.target.value as LabelColor }))} className="h-9 rounded-md border border-white/10 bg-[#07111a] px-2 text-sm text-white">{(['rojo','verde','azul','amarillo','violeta'] as LabelColor[]).map((color) => <option key={color} value={color}>{color[0].toUpperCase() + color.slice(1)}</option>)}</select>
                   <button type="button" disabled={pendingId === merchant.id} onClick={() => void saveLabel(merchant)} className="h-9 rounded-md border border-white/15 px-3 text-sm hover:border-emerald-300/40 disabled:opacity-50">Guardar etiqueta</button>
                 </div>
               </div>
