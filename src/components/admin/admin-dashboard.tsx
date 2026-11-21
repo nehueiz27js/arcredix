@@ -29,6 +29,11 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [nowMs, setNowMs] = useState(0);
+
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,8 +59,8 @@ export function AdminDashboard() {
     return total + (merchant.billing_interval === 'year' ? amount / 12 : amount);
   }, 0);
   const dueSoon = merchants.filter((merchant) => {
-    if (!merchant.current_period_end || merchant.status !== 'active') return false;
-    const days = (new Date(merchant.current_period_end).getTime() - Date.now()) / 86400000;
+    if (!merchant.current_period_end || merchant.status !== 'active' || nowMs === 0) return false;
+    const days = (new Date(merchant.current_period_end).getTime() - nowMs) / 86400000;
     return days >= 0 && days <= 7;
   }).length;
   const cards = [
