@@ -80,12 +80,10 @@ export async function GET(request: Request) {
         nonce: merchant.access_key_nonce as string | null,
         tag: merchant.access_key_tag as string | null,
       });
-      const {
-        access_key_ciphertext: _ciphertext,
-        access_key_nonce: _nonce,
-        access_key_tag: _tag,
-        ...safeMerchant
-      } = merchant;
+      const safeMerchant = { ...merchant };
+      delete safeMerchant.access_key_ciphertext;
+      delete safeMerchant.access_key_nonce;
+      delete safeMerchant.access_key_tag;
       return { ...safeMerchant, access_identifier: accessIdentifier };
     });
     const stats = Array.isArray(statsResult) ? statsResult[0] : statsResult.rows[0];
