@@ -13,7 +13,7 @@ export default function AdminLoginPage() {
         <p>Ingresá con las credenciales administrativas de ARCREDIX.</p>
         <AuthForm mode='login' />
         <div className='mt-5 text-center'>
-          <Link className='text-sm text-slate-400 hover:text-emerald-300' href='/login'>Volver al acceso de comercios</Link>
+          <Link className='text-sm text-slate-400 hover:text-emerald-300' href='/portal/login'>Volver al acceso de comercios</Link>
         </div>
       </section>
     </main>
