@@ -73,7 +73,7 @@ export async function GET(request: Request) {
         ))::int AS merchants_due_soon
         FROM public.merchants`,
     ]);
-    const rawMerchants = Array.isArray(merchantResult) ? merchantResult : merchantResult.rows;
+    const rawMerchants = (Array.isArray(merchantResult) ? merchantResult : merchantResult.rows) as Record<string, unknown>[];
     const merchants = rawMerchants.map((merchant: Record<string, unknown>) => {
       const accessIdentifier = decryptAccessKey({
         ciphertext: merchant.access_key_ciphertext as string | null,
