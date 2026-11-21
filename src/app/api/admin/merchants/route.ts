@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createAccessKey, decryptAccessKey } from '@/lib/auth/access-keys';
+import { createAccessKey } from '@/lib/auth/access-keys';
 import { auth } from '@/lib/auth/server';
 import { isSuperAdminEmail } from '@/lib/auth/superadmin';
 import { getAuthenticatedDatabase } from '@/lib/db/client';
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
       sql`
         SELECT m.id, m.legal_name, m.trade_name, m.owner_name, m.email, m.phone,
           m.whatsapp_phone, m.tax_id, m.status, m.created_at, m.metadata,
-          access.access_key_ciphertext, access.access_key_nonce, access.access_key_tag,
+          access.access_key_hint,
           latest.plan_name, latest.plan_code, latest.subscription_status,
           latest.billing_interval, latest.price_usd, latest.current_period_start,
           latest.current_period_end, latest.connection_limit, latest.plan_features,
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
           WHERE s.merchant_id=m.id ORDER BY s.created_at DESC LIMIT 1
         ) latest ON true
         LEFT JOIN LATERAL (
-          SELECT access_key_ciphertext, access_key_nonce, access_key_tag
+          SELECT access_key_hint
           FROM public.merchant_users
           WHERE merchant_id=m.id AND status='active'
           ORDER BY created_at ASC LIMIT 1
@@ -74,18 +75,7 @@ export async function GET(request: Request) {
         FROM public.merchants`,
     ]);
     const rawMerchants = (Array.isArray(merchantResult) ? merchantResult : merchantResult.rows) as Record<string, unknown>[];
-    const merchants = rawMerchants.map((merchant: Record<string, unknown>) => {
-      const accessIdentifier = decryptAccessKey({
-        ciphertext: merchant.access_key_ciphertext as string | null,
-        nonce: merchant.access_key_nonce as string | null,
-        tag: merchant.access_key_tag as string | null,
-      });
-      const safeMerchant = { ...merchant };
-      delete safeMerchant.access_key_ciphertext;
-      delete safeMerchant.access_key_nonce;
-      delete safeMerchant.access_key_tag;
-      return { ...safeMerchant, access_identifier: accessIdentifier };
-    });
+    const merchants = rawMerchants;
     const stats = Array.isArray(statsResult) ? statsResult[0] : statsResult.rows[0];
     return NextResponse.json({ data: merchants, stats, meta: { returned: merchants.length, limit: 200 } });
   } catch (error) {
@@ -93,18 +83,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'No se pudo cargar la cartera de comercios.' }, { status: 500 });
   }
 }
-
-type NeonAdminApi = {
-  createUser(options: {
-    body: { email: string; password: string; name: string; role: string };
-    headers: Headers;
-  }): Promise<{ id?: string; user?: { id?: string }; data?: { id?: string; user?: { id?: string } } }>;
-  removeUser(options: { body: { userId: string }; headers: Headers }): Promise<unknown>;
-};
-
-// Neon Auth's generated server type marks plugin namespaces as unknown;
-// the Admin endpoints themselves are exposed by Better Auth's server API.
-const neonAdminApi = (auth as unknown as { api: NeonAdminApi }).api;
 
 const labelColors = ['rojo','verde','azul','amarillo','violeta'] as const;
 const createSchema = z.object({
@@ -130,57 +108,7 @@ export async function POST(request: Request) {
   const email = input.email.toLowerCase();
   const ownerName = input.ownerName;
   const accessKey = createAccessKey();
-  let authUserId: string | null = null;
-
-  const provisionAuthUser = async () => {
-    try {
-      const result = await neonAdminApi.createUser({
-        body: {
-          email,
-          password: accessKey.identifier,
-          name: ownerName,
-          role: 'user',
-        },
-        headers: request.headers,
-      });
-      const created = result as unknown as {
-        id?: string;
-        user?: { id?: string };
-        data?: { id?: string; user?: { id?: string } };
-        error?: { message?: string };
-      };
-      if (created.error) {
-        const message = created.error.message || 'Neon Auth no pudo crear la identidad interna.';
-        if (/already|exist|duplicate/i.test(message)) {
-          throw new Error('Ese correo ya tiene una identidad registrada en ARCREDIX.');
-        }
-        throw new Error(message);
-      }
-      const id = created.data?.id ?? created.data?.user?.id ?? created.id ?? created.user?.id;
-      if (!id) throw new Error('Neon Auth respondió sin el identificador de la identidad creada.');
-      return id;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '';
-      if (/unauthorized|forbidden|admin|permission/i.test(message)) {
-        throw new Error('Neon Auth no autorizó la creación de la identidad interna del cliente.');
-      }
-      if (/already|exist|duplicate/i.test(message)) {
-        throw new Error('Ese correo ya tiene una identidad registrada en ARCREDIX.');
-      }
-      throw error;
-    }
-  };
-
-  const rollbackAuthUser = async (authUserIdToDelete: string) => {
-    try {
-      await neonAdminApi.removeUser({
-        body: { userId: authUserIdToDelete },
-        headers: request.headers,
-      });
-    } catch (rollbackError) {
-      console.error('ARCREDIX auth identity compensation failed:', rollbackError);
-    }
-  };
+  const authSubject = randomUUID();
 
   try {
     const sql = await getAuthenticatedDatabase();
@@ -198,8 +126,6 @@ export async function POST(request: Request) {
     if (!(Array.isArray(planCheck) ? planCheck : planCheck.rows).length) {
       return NextResponse.json({ error: 'El plan seleccionado no existe o está inactivo.' }, { status: 400 });
     }
-
-    authUserId = await provisionAuthUser();
 
     const result = await sql`
       WITH plan AS (
@@ -228,10 +154,10 @@ export async function POST(request: Request) {
       ), membership AS (
         INSERT INTO public.merchant_users (
           merchant_id, auth_subject, email, full_name, role, status,
-          access_key_hash, access_key_ciphertext, access_key_nonce, access_key_tag, access_key_created_at
+          access_key_hash, access_key_hint, access_key_created_at
         )
-        SELECT id, ${authUserId}, ${email}, ${ownerName}, 'owner', 'active',
-          ${accessKey.hash}, ${accessKey.ciphertext}, ${accessKey.nonce}, ${accessKey.tag}, now()
+        SELECT id, ${authSubject}, ${email}, ${ownerName}, 'owner', 'active',
+          ${accessKey.hash}, ${accessKey.hint}, now()
         FROM merchant RETURNING merchant_id
       ), audit AS (
         INSERT INTO public.audit_logs (
@@ -239,7 +165,7 @@ export async function POST(request: Request) {
         )
         SELECT id, 'superadmin', 'merchant.created', 'merchant', id,
           'Alta de comercio con identificador de acceso ARCREDIX',
-          jsonb_build_object('email', ${email}, 'auth_user_id', ${authUserId},
+          jsonb_build_object('email', ${email}, 'client_subject', ${authSubject},
             'plan', ${input.planCode}, 'access_key_created', true)
         FROM merchant RETURNING id
       )
@@ -252,9 +178,7 @@ export async function POST(request: Request) {
 
     const rows = Array.isArray(result) ? result : result.rows;
     if (!rows.length) {
-      await rollbackAuthUser(authUserId);
-      authUserId = null;
-      return NextResponse.json({ error: 'No se pudo completar el alta. La identidad interna fue revertida.' }, { status: 500 });
+      return NextResponse.json({ error: 'No se pudo completar el alta del cliente.' }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -262,7 +186,6 @@ export async function POST(request: Request) {
       access: { status: 'created', identifier: accessKey.identifier },
     }, { status: 201 });
   } catch (error) {
-    if (authUserId) await rollbackAuthUser(authUserId);
     console.error('ARCREDIX admin merchants POST failed:', error);
     const message = error instanceof Error ? error.message : 'No se pudo crear el cliente.';
     const status = /correo ya|identidad registrada/i.test(message) ? 409 : /Neon Auth no autorizó/.test(message) ? 403 : 500;
@@ -272,6 +195,7 @@ export async function POST(request: Request) {
 
 const updateSchema = z.object({
   merchantId: z.string().uuid(),
+  regenerateAccess: z.boolean().optional(),
   status: z.enum(['pending','active','suspended','cancelled']).optional(),
   reason: z.string().trim().min(4).max(500).optional(),
   labelName: z.string().trim().max(40).optional(),
@@ -282,7 +206,7 @@ export async function PATCH(request: Request) {
   const user = await authorize();
   if (!user) return NextResponse.json({ error: 'No autorizado.' }, { status: 403 });
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success || (!parsed.data.status && parsed.data.labelName === undefined && parsed.data.labelColor === undefined)) {
+  if (!parsed.success || (!parsed.data.status && parsed.data.labelName === undefined && parsed.data.labelColor === undefined && !parsed.data.regenerateAccess)) {
     return NextResponse.json({ error: 'Indicá cambios válidos para el comercio.' }, { status: 400 });
   }
   const input = parsed.data;
@@ -291,6 +215,40 @@ export async function PATCH(request: Request) {
   }
   try {
     const sql = await getAuthenticatedDatabase();
+    if (input.regenerateAccess) {
+      const accessKey = createAccessKey();
+      const updated = await sql`
+        WITH target AS (
+          SELECT id, merchant_id FROM public.merchant_users
+          WHERE merchant_id = ${input.merchantId} AND status = 'active'
+          ORDER BY created_at ASC LIMIT 1
+        ), changed AS (
+          UPDATE public.merchant_users mu
+          SET access_key_hash = ${accessKey.hash},
+              access_key_hint = ${accessKey.hint},
+              access_key_created_at = now(),
+              updated_at = now()
+          FROM target
+          WHERE mu.id = target.id
+          RETURNING mu.merchant_id
+        ), audit AS (
+          INSERT INTO public.audit_logs (merchant_id, actor_type, action, entity_type, entity_id, reason, after_data)
+          SELECT merchant_id, 'superadmin', 'merchant.access_identifier_regenerated',
+            'merchant', merchant_id, 'Regeneración del identificador de acceso',
+            jsonb_build_object('actor_email', ${user.email}, 'access_key_regenerated', true)
+          FROM changed RETURNING id
+        )
+        SELECT changed.merchant_id FROM changed CROSS JOIN audit
+      `;
+      const rows = Array.isArray(updated) ? updated : updated.rows;
+      if (!rows.length) {
+        return NextResponse.json({ error: 'No se encontró un usuario activo para este comercio.' }, { status: 404 });
+      }
+      return NextResponse.json({
+        data: rows[0],
+        access: { status: 'regenerated', identifier: accessKey.identifier },
+      });
+    }
     const result = await sql`
       WITH target AS (
         SELECT id,status,metadata FROM public.merchants WHERE id=${input.merchantId} FOR UPDATE
