@@ -68,60 +68,54 @@ export async function GET(request: Request) {
   }
 }
 
-const labelColors = ['emerald','blue','violet','amber','rose','cyan','slate'] as const;
+const labelColors = ['rojo','verde','azul','amarillo','violeta'] as const;
 const createSchema = z.object({
-  legalName: z.string().trim().min(2).max(200),
-  tradeName: z.string().trim().max(200).optional().default(''),
-  ownerName: z.string().trim().min(2).max(200),
+  firstName: z.string().trim().min(2).max(100),
+  lastName: z.string().trim().min(2).max(100),
+  tradeName: z.string().trim().min(2).max(200),
+  holderRole: z.enum(['dueño','encargado','gerente','segundo_dueño']),
   email: z.string().trim().email().max(256),
-  phone: z.string().trim().max(40).optional().default(''),
-  whatsappPhone: z.string().trim().max(40).optional().default(''),
-  taxId: z.string().trim().max(40).optional().default(''),
+  dni: z.string().trim().min(6).max(20),
   planCode: z.enum(['starter','growth','business']),
-  billingInterval: z.enum(['month','year','one_time']),
-  status: z.enum(['pending','active']).default('pending'),
-  labelName: z.string().trim().max(40).optional().default(''),
-  labelColor: z.enum(labelColors).default('emerald'),
-});
+  billingStartDate: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/),
+  labelColor: z.enum(labelColors),
+  whatsappPhone: z.string().trim().min(6).max(40),
+})
 
 export async function POST(request: Request) {
   const user = await authorize();
   if (!user) return NextResponse.json({ error: 'No autorizado.' }, { status: 403 });
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: 'Revisá los datos del comercio y el plan.' }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: 'Revisá los datos del cliente y el plan.' }, { status: 400 });
   const input = parsed.data;
   const email = input.email.toLowerCase();
-
+  const ownerName = input.firstName + ' ' + input.lastName;
+  const mappedRole = input.holderRole === 'dueño' ? 'owner' : input.holderRole === 'encargado' ? 'manager' : 'admin';
+  const labelNames: Record<typeof input.labelColor, string> = { rojo: 'Rojo', verde: 'Verde', azul: 'Azul', amarillo: 'Amarillo', violeta: 'Violeta' };
   try {
     const sql = await getAuthenticatedDatabase();
     const result = await sql`
       WITH plan AS (
-        SELECT id, monthly_price_usd FROM public.plans
-        WHERE code=${input.planCode} AND is_active=true
+        SELECT id, monthly_price_usd FROM public.plans WHERE code=${input.planCode} AND is_active=true
       ), merchant AS (
-        INSERT INTO public.merchants (legal_name,trade_name,owner_name,email,phone,whatsapp_phone,tax_id,status,metadata)
-        SELECT ${input.legalName},nullif(${input.tradeName},''),${input.ownerName},${email},
-          nullif(${input.phone},''),nullif(${input.whatsappPhone},''),nullif(${input.taxId},''),
-          ${input.status},jsonb_build_object('admin_label',jsonb_build_object(
-            'name',nullif(${input.labelName},''),'color',${input.labelColor}))
+        INSERT INTO public.merchants (legal_name,trade_name,owner_name,email,whatsapp_phone,tax_id,status,metadata)
+        SELECT ${input.tradeName},${input.tradeName},${ownerName},${email},${input.whatsappPhone},${input.dni},
+          'pending',jsonb_build_object('admin_label',jsonb_build_object('name',${labelNames[input.labelColor]},'color',${input.labelColor}),
+          'holder_role',${input.holderRole},'dni',${input.dni})
         FROM plan RETURNING id,created_at
       ), subscription AS (
         INSERT INTO public.subscriptions (merchant_id,plan_id,status,billing_interval,price_usd,starts_at,current_period_start,current_period_end,metadata)
-        SELECT m.id,p.id,${input.status === 'active' ? 'active' : 'pending'},${input.billingInterval},
-          CASE WHEN ${input.billingInterval}='year' THEN p.monthly_price_usd*12
-               WHEN ${input.billingInterval}='one_time' THEN 390
-               ELSE p.monthly_price_usd END,
-          now(),now(),CASE WHEN ${input.billingInterval}='month' THEN now()+interval '1 month'
-                          WHEN ${input.billingInterval}='year' THEN now()+interval '1 year' ELSE NULL END,
+        SELECT m.id,p.id,'pending','month',p.monthly_price_usd,${input.billingStartDate}::date,
+          ${input.billingStartDate}::date,${input.billingStartDate}::date + interval '30 days',
           jsonb_build_object('created_by',${user.email},'source','superadmin')
         FROM merchant m CROSS JOIN plan p RETURNING id,merchant_id
       ), membership AS (
         INSERT INTO public.merchant_users (merchant_id,email,full_name,role,status)
-        SELECT id,${email},${input.ownerName},'owner','invited' FROM merchant RETURNING merchant_id
+        SELECT id,${email},${ownerName},${mappedRole},'invited' FROM merchant RETURNING merchant_id
       ), audit AS (
         INSERT INTO public.audit_logs (merchant_id,actor_type,action,entity_type,entity_id,reason,after_data)
-        SELECT id,'superadmin','merchant.created','merchant',id,'Alta desde superadmin',
-          jsonb_build_object('email',${email},'plan',${input.planCode},'billing_interval',${input.billingInterval})
+        SELECT id,'superadmin','merchant.created','merchant',id,'Alta simplificada desde superadmin',
+          jsonb_build_object('email',${email},'plan',${input.planCode},'billing_start',${input.billingStartDate},'holder_role',${input.holderRole})
         FROM merchant RETURNING id
       )
       SELECT m.id,m.created_at,s.id AS subscription_id,mm.merchant_id
@@ -130,14 +124,10 @@ export async function POST(request: Request) {
     `;
     const rows = Array.isArray(result) ? result : result.rows;
     if (!rows.length) return NextResponse.json({ error: 'El plan no existe o está inactivo.' }, { status: 400 });
-    const created = rows[0] as Record<string, unknown>;
-    return NextResponse.json({
-      data: created,
-      access: { status: 'pending', message: 'La cuenta de acceso Neon Auth del titular aún requiere provisionamiento.' },
-    }, { status: 201 });
+    return NextResponse.json({ data: rows[0], access: { status: 'pending', message: 'La cuenta de acceso Neon Auth aún requiere provisionamiento seguro.' } }, { status: 201 });
   } catch (error) {
     console.error('ARCREDIX admin merchants POST failed:', error);
-    return NextResponse.json({ error: 'No se pudo crear el comercio. Verificá que el email no esté registrado.' }, { status: 500 });
+    return NextResponse.json({ error: 'No se pudo crear el cliente. Verificá que el Gmail no esté registrado.' }, { status: 500 });
   }
 }
 
