@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { neon } from '@neondatabase/serverless';
+import { neon, Pool } from '@neondatabase/serverless';
 import { auth } from '@/lib/auth/server';
 
 type NeonClient = ReturnType<typeof neon>;
@@ -13,6 +13,14 @@ type Ed25519Jwk = {
   use?: string;
 };
 type JwksResponse = { keys?: Ed25519Jwk[] };
+type AuthenticatedQueryResult = {
+  rows: Record<string, unknown>[];
+  rowCount: number | null;
+};
+type AuthenticatedSql = (
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+) => Promise<AuthenticatedQueryResult>;
 
 let databaseClient: NeonClient | undefined;
 let systemDatabaseClient: NeonClient | undefined;
@@ -45,9 +53,8 @@ function getDatabaseUrl(jwk?: Ed25519Jwk): string {
   }
 
   if (jwk) {
-    // pg_session_jwt reads this startup parameter before validating auth.jwt_session_init().
-    // pg_session_jwt matches the JWT header kid against the configured JWK.
-    // Omitting kid here makes a valid Neon Auth token fail with `jwk not found`.
+    // pg_session_jwt requires this value in PostgreSQL's connection startup packet.
+    // The Pool/WebSocket driver sends startup options; neon() over HTTP does not.
     options.push("-c pg_session_jwt.jwk='" + JSON.stringify({
       kty: jwk.kty,
       crv: jwk.crv,
@@ -145,9 +152,7 @@ async function getJwkForToken(token: string): Promise<Ed25519Jwk> {
 }
 
 /**
- * Application client. It switches the owner login to the restricted
- * arcredix_app role and forwards the authenticated JWT with its matching
- * public JWK in PostgreSQL's connection startup options.
+ * Public database client for queries that do not require an authenticated RLS session.
  */
 export function getDatabase(): NeonClient {
   if (!databaseClient) {
@@ -156,7 +161,6 @@ export function getDatabase(): NeonClient {
 
   return databaseClient;
 }
-
 
 /**
  * Privileged server-only client for the single credential-resolution query used
@@ -186,7 +190,13 @@ export function getSystemDatabase(): NeonClient {
   return systemDatabaseClient;
 }
 
-export async function getAuthenticatedDatabase(): Promise<NeonClient> {
+/**
+ * Authenticated PostgreSQL queries must use a real startup packet because
+ * pg_session_jwt.jwk is a startup-only parameter. The HTTP neon() query function
+ * cannot provide session startup parameters, so each tagged query gets a short
+ * WebSocket-backed transaction with the JWK already supplied by Pool.
+ */
+export async function getAuthenticatedDatabase(): Promise<AuthenticatedSql> {
   const tokenEndpoint = auth.token as unknown as () => Promise<{
     data?: { token?: string } | null;
     error?: unknown;
@@ -199,23 +209,51 @@ export async function getAuthenticatedDatabase(): Promise<NeonClient> {
 
   const token = tokenResult.data.token;
   const jwk = await getJwkForToken(token);
-  // The neon-serverless authToken option authenticates transport requests; it
-  // does not initialize pg_session_jwt. The extension requires both calls
-  // below to run on the same connection and transaction as the protected SQL.
-  const raw = neon(getDatabaseUrl(jwk));
-  const authenticated = new Proxy(raw, {
-    apply(target, thisArg, args: Parameters<NeonClient>) {
-      const initializeJwk = target`SELECT auth.init()`;
-      const initializeJwt = target`SELECT auth.jwt_session_init(${token})`;
-      const protectedQuery = Reflect.apply(target, thisArg, args);
+  const connectionString = getDatabaseUrl(jwk);
 
-      return target.transaction([
-        initializeJwk,
-        initializeJwt,
-        protectedQuery,
-      ]).then((results) => results[2]);
-    },
-  });
+  const authenticatedSql: AuthenticatedSql = async (strings, ...values) => {
+    const queryText = strings.reduce(
+      (query, part, index) => query + (index === 0 ? '' : `$${index}`) + part,
+      '',
+    );
 
-  return authenticated as NeonClient;
+    const pool = new Pool({
+      connectionString,
+      max: 1,
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 1000,
+    });
+
+    let client: Awaited<ReturnType<typeof pool.connect>> | undefined;
+    let transactionStarted = false;
+
+    try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+      transactionStarted = true;
+
+      // JWK is already present in the WebSocket connection startup packet.
+      await client.query('SELECT auth.init()');
+      await client.query('SELECT auth.jwt_session_init($1)', [token]);
+
+      const result = await client.query(queryText, values);
+      await client.query('COMMIT');
+      transactionStarted = false;
+
+      return {
+        rows: result.rows as Record<string, unknown>[],
+        rowCount: result.rowCount,
+      };
+    } catch (error) {
+      if (client && transactionStarted) {
+        await client.query('ROLLBACK').catch(() => undefined);
+      }
+      throw error;
+    } finally {
+      client?.release();
+      await pool.end();
+    }
+  };
+
+  return authenticatedSql;
 }
