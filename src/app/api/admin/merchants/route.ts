@@ -77,7 +77,7 @@ const createSchema = z.object({
   email: z.string().trim().email().max(256),
   dni: z.string().trim().min(6).max(20),
   planCode: z.enum(['starter','growth','business']),
-  billingStartDate: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/),
+  billingStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   labelColor: z.enum(labelColors),
   whatsappPhone: z.string().trim().min(6).max(40),
 })
