@@ -55,8 +55,10 @@ La estructura se implementa de forma incremental: no crear módulos vacíos solo
 ## Límites de confianza
 
 - El cliente web no tiene acceso directo a la base de datos ni a secretos.
-- Neon Auth autentica identidades; ARCREDIX resuelve el rol y la pertenencia al comercio en `merchant_users`.
-- El superadministrador se autoriza en servidor mediante allowlist privada. No se deriva de un campo enviado por el cliente.
+- El cliente presenta únicamente un identificador aleatorio ARCREDIX de 256 bits. El backend busca su hash, valida comercio y membresía, y realiza el inicio de sesión interno en Neon Auth; correo y contraseña no se exponen en la interfaz.
+- `merchant_users` conserva el hash SHA-256 del identificador y una copia cifrada AES-256-GCM para que el superadmin pueda volver a consultarlo. La clave de cifrado se deriva de `NEON_AUTH_COOKIE_SECRET`; no se guarda en Neon.
+- Neon Auth emite la sesión HttpOnly utilizada por las rutas y por RLS. ARCREDIX resuelve el rol y la pertenencia al comercio en `merchant_users`.
+- El superadministrador conserva un acceso independiente con credenciales Neon Auth y se autoriza en servidor mediante allowlist privada. No se deriva de un campo enviado por el cliente.
 - El acceso a datos del comercio se limita a la membresía activa y al estado activo del comercio.
 - Las credenciales de proveedores deben residir en un almacén de secretos o mecanismo cifrado administrado. `credential_reference` es solo una referencia, no un token.
 - Los webhooks se consideran no confiables hasta validar su firma y consultar el pago original en el proveedor.
