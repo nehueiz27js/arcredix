@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
 import { createClientSession } from '@/lib/auth/client-session';
-import { hashAccessKey, normalizeAccessIdentifier } from '@/lib/auth/access-keys';
+import { hashAccessKey, hashLegacyAccessKey, normalizeAccessIdentifier } from '@/lib/auth/access-keys';
 import { getSystemDatabase } from '@/lib/db/client';
 
 export const runtime = 'nodejs';
@@ -14,6 +14,8 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { identifier?: unknown } | null;
   const rawIdentifier = typeof body?.identifier === 'string' ? body.identifier : '';
   const normalized = normalizeAccessIdentifier(rawIdentifier);
+  const isNewCode = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{16}$/.test(normalized);
+  const isLegacyCode = /^[A-Za-z0-9_-]{43}$/.test(rawIdentifier.trim());
   const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
   const ip = (forwardedFor || request.headers.get('x-real-ip') || 'unknown').slice(0, 100);
 
@@ -32,16 +34,17 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!/^[A-Z2-9]{16}$/.test(normalized)) {
+    if (!isNewCode && !isLegacyCode) {
       await sql`INSERT INTO public.login_attempts (ip, scope, success) VALUES (${ip}, 'client', false)`;
       return NextResponse.json({ error: 'Identificador inválido.' }, { status: 401 });
     }
 
+    const identifierHash = isNewCode ? hashAccessKey(normalized) : hashLegacyAccessKey(rawIdentifier.trim());
     const result = await sql`
       SELECT mu.id, mu.auth_subject
       FROM public.merchant_users mu
       INNER JOIN public.merchants m ON m.id = mu.merchant_id
-      WHERE mu.access_key_hash = ${hashAccessKey(normalized)}
+      WHERE mu.access_key_hash = ${identifierHash}
         AND mu.status = 'active'
         AND m.status = 'active'
       LIMIT 1
@@ -56,7 +59,8 @@ export async function POST(request: Request) {
     const subject = membership.auth_subject || randomUUID();
     await sql`
       UPDATE public.merchant_users
-      SET auth_subject = ${subject}, last_login_at = now(), updated_at = now()
+      SET auth_subject = ${subject}, last_login_at = now(),
+          access_key_hint = coalesce(access_key_hint, right(${rawIdentifier.trim()}, 4)), updated_at = now()
       WHERE id = ${membership.id}
     `;
     await sql`INSERT INTO public.login_attempts (ip, scope, success) VALUES (${ip}, 'client', true)`;
